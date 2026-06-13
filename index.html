@@ -308,7 +308,8 @@ function PropertyDetail({prop: rawProp, companyInfo, onChange}) {
 }
 
 // ── 비교 뷰 ───────────────────────────────────────────────
-function CompareView({properties, decided, onDecide}) {
+function CompareView({properties: rawProperties, decided, onDecide}) {
+  const properties = rawProperties.map(safeProp);
   if(properties.length<2) return (
     <div style={{textAlign:"center",padding:"60px 20px",color:"#aaa"}}>
       <div style={{fontSize:40,marginBottom:12}}>🏠🏠</div>
@@ -693,7 +694,9 @@ function App() {
     </div>
   );
 
-  const {properties,checklist,companyInfo,priceNotes={},decided,clNotes={},clNoteOpen={}}=shared;
+  const {properties:rawProperties,checklist:rawChecklist,companyInfo,priceNotes={},decided,clNotes={},clNoteOpen={}}=shared;
+  const properties=(rawProperties||[newProperty(1)]).map(safeProp);
+  const checklist=rawChecklist||{};
 
   const updateProp=(idx,updated,extra=[])=>{
     updateShared({...shared,properties:properties.map((x,i)=>i===idx?updated:x)},[`prop:${updated.id}`,...extra]);
