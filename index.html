@@ -86,6 +86,7 @@ function fmtPerPyeong(val) {
 }
 function newCommute() { return {transitMin:"",carMin:"",transitType:"",transfers:"",walkMin:"",transitRating:0,carRating:0,note:""}; }
 function newProperty(num) { return {id:Date.now()+num,name:`매물 ${num}`,address:"",price:"",memo:"",checked:{},scores:{},commute:newCommute(),itemNotes:{},itemNoteOpen:{}}; }
+function safeProp(p) { return {...p,checked:p.checked||{},scores:p.scores||{},commute:p.commute||newCommute(),itemNotes:p.itemNotes||{},itemNoteOpen:p.itemNoteOpen||{}}; }
 function defaultShared() { return {properties:[newProperty(1)],checklist:{},companyInfo:{address:"",station:"",time:"",transport:""},priceNotes:{},decided:null,clNotes:{},clNoteOpen:{},updatedAt:0}; }
 
 function mergeShared(local, remote) {
@@ -199,12 +200,17 @@ function CommuteSection({prop, companyInfo, onChange}) {
 }
 
 // ── 매물 상세 ─────────────────────────────────────────────
-function PropertyDetail({prop, companyInfo, onChange}) {
+function PropertyDetail({prop: rawProp, companyInfo, onChange}) {
+  const prop = safeProp(rawProp);
   const [expanded, setExpanded] = useState(()=>Object.fromEntries(VIEWING_SECTIONS.map(s=>[s.id,true])));
-  const toggleCheck = key => onChange({...prop, checked:{...prop.checked,[key]:!prop.checked[key]}});
-  const setScore = (sid,val) => onChange({...prop, scores:{...prop.scores,[sid]:val}});
+  const checked = prop.checked||{};
+  const scores = prop.scores||{};
+  const itemNotes = prop.itemNotes||{};
+  const itemNoteOpen = prop.itemNoteOpen||{};
+  const toggleCheck = key => onChange({...prop, checked:{...checked,[key]:!checked[key]}});
+  const setScore = (sid,val) => onChange({...prop, scores:{...scores,[sid]:val}});
   const allKeys = VIEWING_SECTIONS.flatMap(s=>s.items.map((_,i)=>`${s.id}-${i}`));
-  const doneCount = allKeys.filter(k=>prop.checked[k]).length;
+  const doneCount = allKeys.filter(k=>checked[k]).length;
   const progress = Math.round((doneCount/allKeys.length)*100);
   return (
     <div>
@@ -234,8 +240,8 @@ function PropertyDetail({prop, companyInfo, onChange}) {
       <CommuteSection prop={prop} companyInfo={companyInfo} onChange={onChange}/>
       {VIEWING_SECTIONS.map(section=>{
         const isExp = expanded[section.id];
-        const secDone = section.items.filter((_,i)=>prop.checked[`${section.id}-${i}`]).length;
-        const score = prop.scores[section.id]||0;
+        const secDone = section.items.filter((_,i)=>checked[`${section.id}-${i}`]).length;
+        const score = scores[section.id]||0;
         return (
           <div key={section.id} style={{background:"#fff",borderRadius:12,marginBottom:10,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
             <button onClick={()=>setExpanded(p=>({...p,[section.id]:!p[section.id]}))}
@@ -252,9 +258,9 @@ function PropertyDetail({prop, companyInfo, onChange}) {
               <div style={{borderTop:"1px solid #F0F0F0"}}>
                 {section.items.map((item,i)=>{
                   const key=`${section.id}-${i}`;
-                  const done=!!prop.checked[key];
-                  const note=prop.itemNotes?.[key]||"";
-                  const noteOpen=!!(prop.itemNoteOpen?.[key]);
+                  const done=!!checked[key];
+                  const note=itemNotes[key]||"";
+                  const noteOpen=!!(itemNoteOpen[key]);
                   return (
                     <div key={key} style={{borderBottom:"1px solid #F7F8FA",background:done?"#FAFFF8":"#fff"}}>
                       <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px 10px 16px"}}>
@@ -266,14 +272,14 @@ function PropertyDetail({prop, companyInfo, onChange}) {
                           style={{flex:1,fontSize:13,lineHeight:1.5,color:done?"#bbb":"#333",textDecoration:done?"line-through":"none",cursor:"pointer"}}>
                           {item}
                         </span>
-                        <button onClick={e=>{e.stopPropagation();onChange({...prop,itemNoteOpen:{...(prop.itemNoteOpen||{}),[key]:!noteOpen}});}}
+                        <button onClick={e=>{e.stopPropagation();onChange({...prop,itemNoteOpen:{...itemNoteOpen,[key]:!noteOpen}});}}
                           style={{flexShrink:0,width:22,height:22,borderRadius:6,border:"none",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",background:noteOpen||note?"#EEF3FB":"#F5F5F5",color:noteOpen||note?NAVY:"#bbb",fontWeight:700,marginTop:1}}>
                           {note?"📝":"+"}
                         </button>
                       </div>
                       {noteOpen&&(
                         <div style={{paddingLeft:44,paddingRight:14,paddingBottom:10}}>
-                          <input value={note} onChange={e=>onChange({...prop,itemNotes:{...(prop.itemNotes||{}),[key]:e.target.value}})}
+                          <input value={note} onChange={e=>onChange({...prop,itemNotes:{...itemNotes,[key]:e.target.value}})}
                             placeholder="메모 입력..." autoFocus
                             style={{width:"100%",padding:"6px 10px",borderRadius:7,border:"1px solid #D8E4F0",background:"#F5F8FF",fontSize:12.5,color:"#444",outline:"none"}}/>
                         </div>
