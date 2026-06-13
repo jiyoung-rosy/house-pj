@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>🏠 내 집 마련</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { background: #F7F8FA; font-family: -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; }
+  input, textarea, button { font-family: inherit; }
+  button { cursor: pointer; }
+  ::-webkit-scrollbar { width: 0; height: 0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ── Firebase ──────────────────────────────────────────────
+const FB_URL = "https://house-pj-455a4-default-rtdb.firebaseio.com/home-hunt.json";
+async function fbRead() {
+  try { const r = await fetch(FB_URL); return r.ok ? r.json() : null; } catch { return null; }
+}
+async function fbWrite(data) {
+  try { const r = await fetch(FB_URL, { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data) }); return r.ok; } catch { return false; }
+}
+
+// ── 상수 ──────────────────────────────────────────────────
+const NAVY = "#1E3A5F", ACCENT = "#FEE500", POLL_MS = 5000;
+
+const VIEWING_SECTIONS = [
+  { id:"v1", category:"단지·외부", items:["주변 편의시설 (마트, 병원, 지하철)","주차장 규모 및 여유","단지 내 시설 (공원, 헬스장 등)","건물 외벽·복도 노후 상태","엘리베이터 상태"] },
+  { id:"v2", category:"채광·구조", items:["향 (남향·동향·서향·북향)","낮 기준 채광 상태","환기 가능 여부 (맞바람)","방 개수·크기","수납공간 충분한지"] },
+  { id:"v3", category:"하자·노후", items:["천장·벽 곰팡이·물 자국","화장실 타일·줄눈 상태","수압 확인","보일러 연식","바닥 꺼짐·삐걱거림"] },
+  { id:"v4", category:"소음·환경", items:["도로변 소음","위층 소리","주변 공사장·혐오시설"] },
+  { id:"v5", category:"부동산 확인사항", items:["관리비 월 평균","난방 방식 (지역/개별)","입주 가능일 확인","매도 이유 파악","최근 수리·리모델링 내역"] },
+];
+
+const CHECKLIST_SECTIONS = {
+  매매: [
+    { id:"매매-1", category:"매물 서류 확인", items:["등기부등본 (근저당, 압류, 가처분 여부)","건축물대장 (위반건축물 여부)","임대차 현황 확인","관리비 미납 여부","공동주택 관리비 내역"] },
+    { id:"매매-2", category:"계약 전 준비", items:["부동산 중개업 등록증 확인","매도인 신분 확인","계약금 준비 (매매가의 5~10%)","대출 사전 승인","취득세 계산 (1~3%)","법무사 선정"] },
+    { id:"매매-3", category:"계약 당일", items:["계약서 특약사항 확인","계약금 입금 및 영수증","중도금·잔금 일정 확인","하자 보수 특약 확인"] },
+    { id:"매매-4", category:"잔금 및 등기", items:["잔금 납부 및 영수증","소유권 이전 등기 신청","취득세 납부 (60일 이내)","주택 보험 가입"] },
+    { id:"매매-5", category:"입주 전 확인", items:["수도·전기·가스 계량기 확인","하자 사전 점검","인터넷·TV 신청","주차 배정 확인"] },
+  ],
+  이사: [
+    { id:"이사-1", category:"이사 2~4주 전", items:["이사업체 비교 견적 (3곳 이상)","이사 날짜·시간 확정","포장이사 vs 일반이사 결정","불필요한 짐 정리 및 처분"] },
+    { id:"이사-2", category:"이사 1~2주 전", items:["우편물 주소 변경","전기·가스·수도 이전 신청","냉장고 정리 (식재료 소진)","짐 분류 및 박스 포장"] },
+    { id:"이사-3", category:"이사 당일 (구 집)", items:["빠진 물건 없는지 확인","수도·전기·가스 검침 확인","도어락 비밀번호 초기화","열쇠 반납"] },
+    { id:"이사-4", category:"이사 당일 (새 집)", items:["이사 전 하자 사진 촬영","가전제품 설치 확인","수도·전기·가스 작동 확인","경비실 입주 인사"] },
+    { id:"이사-5", category:"이사 후 1주일", items:["전입신고 (14일 이내)","자동차·운전면허 주소 변경","국민건강보험 주소 변경","관리비 자동이체 설정"] },
+  ],
+};
+
+const PRICE_DATA = [
+  { complex:"다은마을 월드메르디앙", types:[{type:"81",sqm:81,jan24:5.85,jun26:7.2},{type:"99B",sqm:99,jan24:6.8,jun26:8.0},{type:"116B",sqm:116,jan24:7.7,jun26:9.4}] },
+  { complex:"기흥역 더샵", types:[{type:"101B",sqm:101,jan24:7.75,jun26:8.8},{type:"118A",sqm:118,jan24:8.8,jun26:9.8}] },
+  { complex:"기흥역 파크 푸르지오", types:[{type:"101A",sqm:101,jan24:7.1,jun26:7.9},{type:"101B",sqm:101,jan24:7.15,jun26:7.9},{type:"116D",sqm:116,jan24:7.7,jun26:9.0},{type:"117A",sqm:117,jan24:7.7,jun26:9.0}] },
+  { complex:"광교더포레스트", types:[{type:"101A",sqm:101,jan24:7.3,jun26:8.7}] },
+  { complex:"꽃메마을 현대홈타운 4차 3단지", types:[{type:"전용",sqm:101,jan24:7.4,jun26:8.9}] },
+  { complex:"블루밍 구성 센트럴", types:[{type:"전용",sqm:101,jan24:8.0,jun26:9.4}] },
+  { complex:"행원마을 동아솔레시티", types:[{type:"전용",sqm:101,jan24:9.2,jun26:9.7}] },
+  { complex:"성동마을 LG빌리지 3차", types:[{type:"전용",sqm:101,jan24:8.8,jun26:9.9}] },
+  { complex:"신촌마을 상록데시앙", types:[{type:"전용",sqm:101,jan24:8.0,jun26:8.2}] },
+];
+
+const SCORE_LABELS = ["","😞 별로","🤔 보통","😊 괜찮음","😍 좋음"];
+const COMMUTE_RATINGS = ["","😩 힘듦","😐 보통","🙂 괜찮음","😄 쾌적"];
+const TRANSIT_TYPES = ["🚇 지하철","🚌 버스","🚇🚌 복합","🚶 도보"];
+
+function fmt(val) {
+  const uk = Math.floor(val), chun = Math.round((val-uk)*10);
+  return chun===0 ? `${uk}억` : `${uk}억 ${chun}천`;
+}
+function pyeongPerPrice(price,sqm) {
+  if(!sqm) return null;
+  return Math.round(((price*10000)/(sqm/3.3058))/100)/100;
+}
+function fmtPerPyeong(val) {
+  return val>=1 ? `${val.toFixed(2)}억` : `${Math.round(val*10000)}만원`;
+}
+function newCommute() { return {transitMin:"",carMin:"",transitType:"",transfers:"",walkMin:"",transitRating:0,carRating:0,note:""}; }
+function newProperty(num) { return {id:Date.now()+num,name:`매물 ${num}`,address:"",price:"",memo:"",checked:{},scores:{},commute:newCommute(),itemNotes:{},itemNoteOpen:{}}; }
+function defaultShared() { return {properties:[newProperty(1)],checklist:{},companyInfo:{address:"",station:"",time:"",transport:""},priceNotes:{},decided:null,clNotes:{},clNoteOpen:{},updatedAt:0}; }
+
+function mergeShared(local, remote) {
+  if(!remote) return local;
+  if(!local) return remote;
+  if((remote.updatedAt||0) <= (local.updatedAt||0)) return local;
+  // 간단 병합: 더 최신 것 우선, properties는 id 기준 합침
+  const result = {...remote};
+  const lById = Object.fromEntries((local.properties||[]).map(p=>[p.id,p]));
+  const rById = Object.fromEntries((remote.properties||[]).map(p=>[p.id,p]));
+  const allIds = [...new Set([...Object.keys(lById),...Object.keys(rById)])];
+  result.properties = allIds.map(id => {
+    if(lById[id]&&!rById[id]) return lById[id];
+    if(!lById[id]&&rById[id]) return rById[id];
+    return (remote.updatedAt||0)>(local.updatedAt||0) ? rById[id] : lById[id];
+  });
+  return result;
+}
+
+// ── 출퇴근 섹션 ───────────────────────────────────────────
+function CommuteSection({prop, companyInfo, onChange}) {
+  const c = prop.commute||{};
+  const upd = (f,v) => onChange({...prop, commute:{...prop.commute,[f]:v}});
+  const dest = companyInfo.address||companyInfo.station||"";
+  const tc = m => { const n=parseInt(m); return !n?"#ddd":n<=30?"#4CAF50":n<=60?"#FF9800":"#F44336"; };
+  const td = m => { const n=parseInt(m); return !n?"—":n<=30?"🟢":n<=60?"🟡":"🔴"; };
+  return (
+    <div style={{background:"#fff",borderRadius:12,marginBottom:10,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+      <div style={{padding:"13px 16px 0",display:"flex",alignItems:"center",gap:8}}>
+        <div style={{width:26,height:26,borderRadius:6,background:"#FFF3E0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>🚇</div>
+        <span style={{fontWeight:700,fontSize:13.5,color:"#1a1a2e"}}>출퇴근 정보</span>
+      </div>
+      {!dest&&<div style={{margin:"10px 16px 0",padding:"9px 12px",background:"#FFF8E1",borderRadius:8,fontSize:12,color:"#F57F17"}}>⚠️ 설정 탭에서 회사 위치를 먼저 입력해주세요</div>}
+      <div style={{padding:"12px 16px 14px"}}>
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:12,color:"#888",fontWeight:600,marginBottom:8}}>🚇 대중교통</div>
+          <div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap"}}>
+            {TRANSIT_TYPES.map(t=>(
+              <button key={t} onClick={()=>upd("transitType",c.transitType===t?"":t)}
+                style={{padding:"5px 10px",borderRadius:6,border:"none",fontSize:11,fontWeight:600,background:c.transitType===t?NAVY:"#F0F0F5",color:c.transitType===t?ACCENT:"#888"}}>
+                {t}
+              </button>
+            ))}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
+            {[["총 소요시간","transitMin","분","40"],["환승 횟수","transfers","회","1"],["도보 시간","walkMin","분","10"]].map(([label,field,unit,ph])=>(
+              <div key={field}>
+                <div style={{fontSize:10,color:"#bbb",marginBottom:3}}>{label}</div>
+                <div style={{display:"flex",alignItems:"center",gap:3}}>
+                  <input value={c[field]||""} onChange={e=>upd(field,e.target.value.replace(/[^0-9]/g,""))} placeholder={ph}
+                    style={{width:"100%",padding:"7px 8px",borderRadius:7,border:"1px solid #E8E8E8",fontSize:13,textAlign:"center",color:"#333",outline:"none"}}/>
+                  <span style={{fontSize:11,color:"#aaa",whiteSpace:"nowrap"}}>{unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+            <span style={{fontSize:16}}>{td(c.transitMin)}</span>
+            <span style={{fontSize:12,color:tc(c.transitMin),fontWeight:700}}>
+              {c.transitMin?`${c.transitMin}분`:"시간 미입력"}
+              {c.transfers?` · 환승 ${c.transfers}회`:""}
+              {c.walkMin?` · 도보 ${c.walkMin}분`:""}
+            </span>
+          </div>
+          <div style={{display:"flex",gap:5}}>
+            {[1,2,3,4].map(v=>(
+              <button key={v} onClick={()=>upd("transitRating",c.transitRating===v?0:v)}
+                style={{flex:1,padding:"5px 2px",borderRadius:6,border:"none",fontSize:10.5,fontWeight:600,background:c.transitRating===v?NAVY:"#F0F0F5",color:c.transitRating===v?ACCENT:"#888"}}>
+                {COMMUTE_RATINGS[v]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:12,color:"#888",fontWeight:600,marginBottom:8}}>🚗 자차</div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <div style={{fontSize:10,color:"#bbb",marginBottom:3}}>소요시간</div>
+            <div style={{display:"flex",alignItems:"center",gap:4}}>
+              <input value={c.carMin||""} onChange={e=>upd("carMin",e.target.value.replace(/[^0-9]/g,""))}
+                placeholder="30" style={{width:64,padding:"7px 8px",borderRadius:7,border:"1px solid #E8E8E8",fontSize:13,textAlign:"center",color:"#333",outline:"none"}}/>
+              <span style={{fontSize:11,color:"#aaa"}}>분</span>
+              <span style={{fontSize:16}}>{td(c.carMin)}</span>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:5}}>
+            {[1,2,3,4].map(v=>(
+              <button key={v} onClick={()=>upd("carRating",c.carRating===v?0:v)}
+                style={{flex:1,padding:"5px 2px",borderRadius:6,border:"none",fontSize:10.5,fontWeight:600,background:c.carRating===v?NAVY:"#F0F0F5",color:c.carRating===v?ACCENT:"#888"}}>
+                {COMMUTE_RATINGS[v]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <input value={c.note||""} onChange={e=>upd("note",e.target.value)} placeholder="출퇴근 메모 (환승 복잡함, 주차 어려움 등)"
+          style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid #E8E8E8",fontSize:12.5,color:"#555",outline:"none"}}/>
+        {dest&&(
+          <div style={{display:"flex",gap:8,marginTop:10}}>
+            <a href={`https://map.kakao.com/link/to/${encodeURIComponent(dest)}`} target="_blank"
+              style={{flex:1,padding:"9px",borderRadius:8,background:"#FEE500",color:"#3A1D00",fontSize:12,fontWeight:700,textAlign:"center",textDecoration:"none",display:"block"}}>
+              🗺 카카오맵
+            </a>
+            <a href={`https://m.map.naver.com/directions/?to=${encodeURIComponent(dest)}`} target="_blank"
+              style={{flex:1,padding:"9px",borderRadius:8,background:"#03C75A",color:"#fff",fontSize:12,fontWeight:700,textAlign:"center",textDecoration:"none",display:"block"}}>
+              🗺 네이버맵
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── 매물 상세 ─────────────────────────────────────────────
+function PropertyDetail({prop, companyInfo, onChange}) {
+  const [expanded, setExpanded] = useState(()=>Object.fromEntries(VIEWING_SECTIONS.map(s=>[s.id,true])));
+  const toggleCheck = key => onChange({...prop, checked:{...prop.checked,[key]:!prop.checked[key]}});
+  const setScore = (sid,val) => onChange({...prop, scores:{...prop.scores,[sid]:val}});
+  const allKeys = VIEWING_SECTIONS.flatMap(s=>s.items.map((_,i)=>`${s.id}-${i}`));
+  const doneCount = allKeys.filter(k=>prop.checked[k]).length;
+  const progress = Math.round((doneCount/allKeys.length)*100);
+  return (
+    <div>
+      <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,color:"#bbb",marginBottom:4}}>매물 이름</div>
+          <input value={prop.name||""} onChange={e=>onChange({...prop,name:e.target.value})} placeholder="예: 기흥역 더샵 101B"
+            style={{width:"100%",padding:"9px 12px",borderRadius:9,border:"1.5px solid #D0DCF0",fontSize:15,fontWeight:700,color:NAVY,outline:"none",background:"#F5F8FF"}}/>
+        </div>
+        <div style={{height:1,background:"#F0F0F0",marginBottom:12}}/>
+        {[["주소","address","예: 경기도 용인시 기흥구"],["가격","price","예: 8억 8천"],["메모","memo","특이사항, 느낀 점"]].map(([label,field,ph])=>(
+          <div key={field} style={{marginBottom:8}}>
+            <div style={{fontSize:11,color:"#bbb",marginBottom:3}}>{label}</div>
+            <input value={prop[field]||""} onChange={e=>onChange({...prop,[field]:e.target.value})} placeholder={ph}
+              style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid #E8E8E8",fontSize:13,color:"#333",outline:"none"}}/>
+          </div>
+        ))}
+      </div>
+      <div style={{background:NAVY,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:12}}>
+        <div style={{flex:1}}>
+          <div style={{background:"rgba(255,255,255,0.2)",borderRadius:99,height:5,overflow:"hidden"}}>
+            <div style={{width:`${progress}%`,height:"100%",background:ACCENT,borderRadius:99,transition:"width 0.3s"}}/>
+          </div>
+        </div>
+        <span style={{color:ACCENT,fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>{doneCount}/{allKeys.length} 확인</span>
+      </div>
+      <CommuteSection prop={prop} companyInfo={companyInfo} onChange={onChange}/>
+      {VIEWING_SECTIONS.map(section=>{
+        const isExp = expanded[section.id];
+        const secDone = section.items.filter((_,i)=>prop.checked[`${section.id}-${i}`]).length;
+        const score = prop.scores[section.id]||0;
+        return (
+          <div key={section.id} style={{background:"#fff",borderRadius:12,marginBottom:10,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+            <button onClick={()=>setExpanded(p=>({...p,[section.id]:!p[section.id]}))}
+              style={{width:"100%",background:"none",border:"none",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{width:26,height:26,borderRadius:6,background:secDone===section.items.length?"#E8F5E9":"#EEF3FB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:secDone===section.items.length?"#388E3C":NAVY}}>
+                  {secDone===section.items.length?"✓":secDone}
+                </div>
+                <span style={{fontWeight:700,fontSize:13.5,color:"#1a1a2e"}}>{section.category}</span>
+              </div>
+              <span style={{color:"#ccc",fontSize:11}}>{isExp?"▲":"▼"}</span>
+            </button>
+            {isExp&&(
+              <div style={{borderTop:"1px solid #F0F0F0"}}>
+                {section.items.map((item,i)=>{
+                  const key=`${section.id}-${i}`;
+                  const done=!!prop.checked[key];
+                  const note=prop.itemNotes?.[key]||"";
+                  const noteOpen=!!(prop.itemNoteOpen?.[key]);
+                  return (
+                    <div key={key} style={{borderBottom:"1px solid #F7F8FA",background:done?"#FAFFF8":"#fff"}}>
+                      <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px 10px 16px"}}>
+                        <div onClick={()=>toggleCheck(key)}
+                          style={{width:18,height:18,borderRadius:4,flexShrink:0,marginTop:2,border:done?"none":"1.5px solid #C5D0E0",background:done?"#4CAF50":"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+                          {done&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span>}
+                        </div>
+                        <span onClick={()=>toggleCheck(key)}
+                          style={{flex:1,fontSize:13,lineHeight:1.5,color:done?"#bbb":"#333",textDecoration:done?"line-through":"none",cursor:"pointer"}}>
+                          {item}
+                        </span>
+                        <button onClick={e=>{e.stopPropagation();onChange({...prop,itemNoteOpen:{...(prop.itemNoteOpen||{}),[key]:!noteOpen}});}}
+                          style={{flexShrink:0,width:22,height:22,borderRadius:6,border:"none",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",background:noteOpen||note?"#EEF3FB":"#F5F5F5",color:noteOpen||note?NAVY:"#bbb",fontWeight:700,marginTop:1}}>
+                          {note?"📝":"+"}
+                        </button>
+                      </div>
+                      {noteOpen&&(
+                        <div style={{paddingLeft:44,paddingRight:14,paddingBottom:10}}>
+                          <input value={note} onChange={e=>onChange({...prop,itemNotes:{...(prop.itemNotes||{}),[key]:e.target.value}})}
+                            placeholder="메모 입력..." autoFocus
+                            style={{width:"100%",padding:"6px 10px",borderRadius:7,border:"1px solid #D8E4F0",background:"#F5F8FF",fontSize:12.5,color:"#444",outline:"none"}}/>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <div style={{padding:"10px 16px",background:"#FAFBFF",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <span style={{fontSize:12,color:"#888"}}>이 항목 평가</span>
+                  <div style={{display:"flex",gap:4}}>
+                    {[1,2,3,4].map(v=>(
+                      <button key={v} onClick={()=>setScore(section.id,score===v?0:v)}
+                        style={{padding:"4px 7px",borderRadius:6,border:"none",fontSize:10.5,fontWeight:600,background:score===v?NAVY:"#EEF0F5",color:score===v?ACCENT:"#888"}}>
+                        {SCORE_LABELS[v]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── 비교 뷰 ───────────────────────────────────────────────
+function CompareView({properties, decided, onDecide}) {
+  if(properties.length<2) return (
+    <div style={{textAlign:"center",padding:"60px 20px",color:"#aaa"}}>
+      <div style={{fontSize:40,marginBottom:12}}>🏠🏠</div>
+      <div style={{fontSize:14,fontWeight:600,color:"#888",marginBottom:6}}>매물 2개 이상이면 비교할 수 있어요</div>
+    </div>
+  );
+  const cols=`100px repeat(${properties.length}, 1fr)`;
+  const commuteScore=p=>(p.commute?.transitRating||0)+(p.commute?.carRating||0);
+  return (
+    <div>
+      <div style={{display:"grid",gridTemplateColumns:cols,gap:5,marginBottom:8}}>
+        <div/>
+        {properties.map(p=>(
+          <div key={p.id} style={{background:decided===p.id?ACCENT:NAVY,borderRadius:10,padding:"10px 6px",textAlign:"center"}}>
+            <div style={{color:decided===p.id?NAVY:ACCENT,fontWeight:700,fontSize:12}}>{decided===p.id?"👑 ":""}{p.name}</div>
+            {p.price&&<div style={{color:decided===p.id?"rgba(0,0,0,0.5)":"rgba(255,255,255,0.65)",fontSize:10,marginTop:2}}>{p.price}</div>}
+          </div>
+        ))}
+      </div>
+      <div style={{background:"#FFF8E1",borderRadius:10,padding:"10px 12px",marginBottom:10}}>
+        <div style={{fontSize:12,fontWeight:700,color:"#E65100",marginBottom:8}}>🚇 출퇴근 비교</div>
+        {[["대중교통",p=>p.commute?.transitMin,p=>[p.commute?.transitType,p.commute?.transfers?`환승 ${p.commute.transfers}회`:"",p.commute?.walkMin?`도보 ${p.commute.walkMin}분`:""].filter(Boolean).join(" · ")],
+          ["자차",p=>p.commute?.carMin,()=>""]].map(([label,getVal,getSub])=>(
+          <div key={label} style={{display:"grid",gridTemplateColumns:cols,gap:5,marginBottom:5,alignItems:"center"}}>
+            <div style={{fontSize:11,color:"#777"}}>{label}</div>
+            {properties.map(p=>{
+              const min=parseInt(getVal(p))||0;
+              const best=Math.min(...properties.map(pp=>parseInt(getVal(pp))||999));
+              const sub=getSub(p);
+              return (
+                <div key={p.id} style={{background:"#fff",borderRadius:7,padding:"7px 5px",textAlign:"center"}}>
+                  {min>0?<><div style={{fontSize:14,fontWeight:700,color:min===best?"#4CAF50":"#555"}}>{min}분</div>{min===best&&<div style={{fontSize:9,color:"#4CAF50"}}>최단</div>}</>
+                  :sub?<div style={{fontSize:10,color:"#777"}}>{sub}</div>
+                  :<div style={{fontSize:12,color:"#ddd"}}>—</div>}
+                  {min>0&&sub&&<div style={{fontSize:9,color:"#aaa",marginTop:2}}>{sub}</div>}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      {VIEWING_SECTIONS.map(section=>(
+        <div key={section.id} style={{background:"#fff",borderRadius:12,marginBottom:8,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+          <div style={{display:"grid",gridTemplateColumns:cols,gap:5,padding:"10px 12px",background:"#F8F9FB",alignItems:"center"}}>
+            <div style={{fontSize:11.5,color:"#333",fontWeight:700}}>{section.category}</div>
+            {properties.map(p=>{
+              const s=p.scores[section.id]||0;
+              const done=section.items.filter((_,i)=>p.checked[`${section.id}-${i}`]).length;
+              return <div key={p.id} style={{textAlign:"center"}}><div style={{fontSize:12}}>{s>0?SCORE_LABELS[s]:"—"}</div><div style={{fontSize:9,color:"#bbb"}}>{done}/{section.items.length}</div></div>;
+            })}
+          </div>
+          {section.items.map((item,i)=>{
+            const key=`${section.id}-${i}`;
+            const hasAny=properties.some(p=>p.checked[key]||p.itemNotes?.[key]);
+            if(!hasAny) return null;
+            return (
+              <div key={key} style={{borderTop:"1px solid #F0F0F0"}}>
+                <div style={{padding:"6px 12px 2px",fontSize:11,color:"#888"}}>{item}</div>
+                <div style={{display:"grid",gridTemplateColumns:cols,gap:5,padding:"0 12px 8px",alignItems:"start"}}>
+                  <div/>
+                  {properties.map(p=>{
+                    const done=!!p.checked[key];
+                    const note=p.itemNotes?.[key]||"";
+                    return (
+                      <div key={p.id} style={{background:done?"#F0FFF4":"#FAFAFA",borderRadius:6,padding:"5px 7px",minHeight:28}}>
+                        <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:note?3:0}}>
+                          <div style={{width:14,height:14,borderRadius:3,background:done?"#4CAF50":"#E0E0E0",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                            {done&&<span style={{color:"#fff",fontSize:9,fontWeight:700}}>✓</span>}
+                          </div>
+                          <span style={{fontSize:10,color:done?"#388E3C":"#bbb",fontWeight:600}}>{done?"확인":"미확인"}</span>
+                        </div>
+                        {note&&<div style={{fontSize:10.5,color:"#555",lineHeight:1.4}}>{note}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+      <div style={{height:1,background:"#E8E8E8",margin:"10px 0"}}/>
+      <div style={{display:"grid",gridTemplateColumns:cols,gap:5,marginBottom:12}}>
+        <div style={{fontSize:12,color:"#555",fontWeight:700}}>총점</div>
+        {properties.map(p=>{
+          const total=VIEWING_SECTIONS.reduce((a,s)=>a+(p.scores[s.id]||0),0)+commuteScore(p);
+          const max=VIEWING_SECTIONS.length*4+8;
+          const best=Math.max(...properties.map(pp=>VIEWING_SECTIONS.reduce((a,s)=>a+(pp.scores[s.id]||0),0)+commuteScore(pp)));
+          const isBest=total===best&&total>0;
+          return (
+            <div key={p.id} style={{background:isBest?NAVY:"#fff",borderRadius:8,padding:"10px 5px",textAlign:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.08)"}}>
+              <div style={{fontSize:20,fontWeight:700,color:isBest?ACCENT:"#333"}}>{total}</div>
+              <div style={{fontSize:9,color:isBest?"rgba(255,255,255,0.4)":"#ccc"}}>/{max}</div>
+              {isBest&&<div style={{fontSize:11,color:ACCENT,marginTop:1}}>👑</div>}
+              <button onClick={()=>onDecide(p.id)}
+                style={{marginTop:4,padding:"3px 6px",borderRadius:5,border:"none",fontSize:9,fontWeight:600,background:decided===p.id?"#FEE500":"#EEF0F5",color:decided===p.id?NAVY:"#888",cursor:"pointer"}}>
+                {decided===p.id?"결정됨":"결정"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── 시세 뷰 ───────────────────────────────────────────────
+function PriceView({priceNotes, onNotesChange}) {
+  const [sortBy,setSortBy]=useState("diff");
+  const [maxBudget,setMaxBudget]=useState("");
+  const [showPP,setShowPP]=useState(false);
+  const [expandNote,setExpandNote]=useState(null);
+  const notes=priceNotes||{};
+  const allTypes=PRICE_DATA.flatMap((c,ci)=>c.types.map((t,ti)=>({...t,complex:c.complex,ci,ti,diff:t.jun26-t.jan24,pct:Math.round(((t.jun26-t.jan24)/t.jan24)*100),pp:pyeongPerPrice(t.jun26,t.sqm)})));
+  const budgetNum=parseFloat(maxBudget);
+  const filtered=maxBudget&&!isNaN(budgetNum)?allTypes.filter(t=>t.jun26<=budgetNum):allTypes;
+  const sorted=[...filtered].sort((a,b)=>sortBy==="diff"?b.diff-a.diff:sortBy==="pct"?b.pct-a.pct:sortBy==="price"?a.jun26-b.jun26:(a.pp||999)-(b.pp||999));
+  const maxDiff=Math.max(...sorted.map(t=>t.diff),0.01);
+  return (
+    <div>
+      <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:6}}>💰 예산 필터</div>
+          <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+            {["7","8","9","10"].map(v=>(
+              <button key={v} onClick={()=>setMaxBudget(maxBudget===v?"":v)}
+                style={{padding:"5px 12px",borderRadius:20,border:"none",fontSize:12,fontWeight:600,background:maxBudget===v?NAVY:"#F0F0F5",color:maxBudget===v?ACCENT:"#666"}}>
+                {v}억 이하
+              </button>
+            ))}
+            <input value={maxBudget} onChange={e=>setMaxBudget(e.target.value.replace(/[^0-9.]/g,""))} placeholder="직접입력"
+              style={{width:64,padding:"5px 8px",borderRadius:8,border:"1px solid #E8E8E8",fontSize:12,textAlign:"center",outline:"none"}}/>
+            <span style={{fontSize:11,color:"#aaa"}}>억</span>
+            {maxBudget&&<button onClick={()=>setMaxBudget("")} style={{padding:"5px 10px",borderRadius:20,border:"none",background:"#FFE8E8",color:"#E57373",fontSize:11}}>초기화</button>}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+            {[["diff","상승액↑"],["pct","상승률↑"],["price","가격↓"],["pp","평당↓"]].map(([k,l])=>(
+              <button key={k} onClick={()=>setSortBy(k)}
+                style={{padding:"5px 9px",borderRadius:6,border:"none",fontSize:11,fontWeight:600,background:sortBy===k?NAVY:"#F0F0F5",color:sortBy===k?ACCENT:"#777"}}>
+                {l}
+              </button>
+            ))}
+          </div>
+          <button onClick={()=>setShowPP(p=>!p)}
+            style={{padding:"5px 10px",borderRadius:6,border:"none",fontSize:11,fontWeight:600,background:showPP?"#E8F5E9":"#F0F0F5",color:showPP?"#388E3C":"#777"}}>
+            평당가 {showPP?"ON":"OFF"}
+          </button>
+        </div>
+      </div>
+      <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+        {sorted.length===0?<div style={{textAlign:"center",padding:"20px 0",color:"#bbb"}}>해당 예산 내 매물 없음</div>
+        :sorted.map((t,i)=>{
+          const bw=sortBy==="diff"?Math.round((t.diff/maxDiff)*100):sortBy==="pct"?Math.round((t.pct/Math.max(...sorted.map(x=>x.pct)))*100):Math.max(20,100-Math.round(((t.jun26-Math.min(...sorted.map(x=>x.jun26)))/(Math.max(...sorted.map(x=>x.jun26))-Math.min(...sorted.map(x=>x.jun26))||1))*80));
+          const bc=sortBy==="price"||sortBy==="pp"?"#4CAF50":t.diff>=1.3?"#E53935":t.diff>=0.8?"#FF7043":"#FFA726";
+          return (
+            <div key={i} style={{marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:3,alignItems:"flex-end"}}>
+                <div>
+                  <span style={{fontSize:10,color:"#aaa"}}>{t.complex}</span>
+                  <span style={{fontSize:12,color:NAVY,fontWeight:700,marginLeft:4}}>{t.type}㎡</span>
+                  {t.sqm&&<span style={{fontSize:10,color:"#bbb",marginLeft:4}}>({(t.sqm/3.3058).toFixed(1)}평)</span>}
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <span style={{fontSize:12,fontWeight:700,color:"#333"}}>{fmt(t.jun26)}</span>
+                  {showPP&&t.pp&&<span style={{fontSize:10,color:"#888",marginLeft:4}}>/ 평당 {fmtPerPyeong(t.pp)}</span>}
+                </div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <div style={{flex:1,background:"#F0F0F0",borderRadius:99,height:6,overflow:"hidden"}}>
+                  <div style={{width:`${Math.max(bw,5)}%`,height:"100%",background:bc,borderRadius:99}}/>
+                </div>
+                <span style={{fontSize:10,color:"#E53935",fontWeight:700,whiteSpace:"nowrap"}}>+{fmt(t.diff)} ({t.pct}%↑)</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {PRICE_DATA.map((complex,ci)=>{
+        const note=notes[ci]||"";
+        const visibleTypes=maxBudget&&!isNaN(parseFloat(maxBudget))?complex.types.filter(t=>t.jun26<=parseFloat(maxBudget)):complex.types;
+        if(visibleTypes.length===0) return null;
+        return (
+          <div key={ci} style={{background:"#fff",borderRadius:12,marginBottom:10,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+            <div style={{padding:"11px 14px 9px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #F0F0F0"}}>
+              <span style={{fontWeight:700,fontSize:12.5,color:NAVY}}>🏢 {complex.complex}</span>
+              <button onClick={()=>setExpandNote(expandNote===ci?null:ci)}
+                style={{padding:"4px 10px",borderRadius:6,border:"none",background:expandNote===ci?"#EEF3FB":"#F5F5F5",color:expandNote===ci?NAVY:"#aaa",fontSize:11,fontWeight:600}}>
+                {note?"📝 메모 있음":"📝 메모"}
+              </button>
+            </div>
+            {expandNote===ci&&(
+              <div style={{padding:"10px 14px",background:"#F8F9FF",borderBottom:"1px solid #F0F0F0"}}>
+                <textarea value={note} onChange={e=>onNotesChange({...notes,[ci]:e.target.value})}
+                  placeholder="이 단지 메모 (예: 남편 마음에 듦, 주차 걱정됨...)"
+                  style={{width:"100%",minHeight:60,padding:"8px 10px",borderRadius:8,border:"1px solid #E0E0E0",fontSize:12.5,color:"#444",resize:"none",outline:"none"}}/>
+              </div>
+            )}
+            <div style={{padding:"6px 0"}}>
+              <div style={{display:"grid",gridTemplateColumns:showPP?"52px 1fr 1fr 1fr 72px":"52px 1fr 1fr 72px",gap:3,padding:"3px 12px 5px",borderBottom:"1px solid #F5F5F5"}}>
+                {["타입","24년1월","26년6월",...(showPP?["평당가"]:[]),"상승"].map((h,i)=>(
+                  <div key={i} style={{fontSize:9.5,color:"#bbb",textAlign:i>0?"right":"left"}}>{h}</div>
+                ))}
+              </div>
+              {visibleTypes.map((t,ti)=>{
+                const diff=t.jun26-t.jan24,pct=Math.round((diff/t.jan24)*100),pp=pyeongPerPrice(t.jun26,t.sqm);
+                return (
+                  <div key={ti} style={{display:"grid",gridTemplateColumns:showPP?"52px 1fr 1fr 1fr 72px":"52px 1fr 1fr 72px",gap:3,padding:"7px 12px",borderTop:"1px solid #F7F8FA",alignItems:"center"}}>
+                    <div style={{fontSize:11.5,fontWeight:700,color:NAVY}}>{t.type}</div>
+                    <div style={{fontSize:11,color:"#999",textAlign:"right"}}>{fmt(t.jan24)}</div>
+                    <div style={{fontSize:11.5,fontWeight:600,color:"#333",textAlign:"right"}}>{fmt(t.jun26)}</div>
+                    {showPP&&<div style={{fontSize:10.5,color:"#555",textAlign:"right"}}>{pp?fmtPerPyeong(pp):"—"}</div>}
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:11,fontWeight:700,color:"#E53935"}}>+{fmt(diff)}</div>
+                      <div style={{fontSize:9,color:"#FF7043"}}>{pct}%↑</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── 설정 뷰 ───────────────────────────────────────────────
+function SettingsView({companyInfo, onChange}) {
+  const dest=companyInfo.address||companyInfo.station||"";
+  return (
+    <div>
+      <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#1a1a2e",marginBottom:12}}>🏢 회사 위치</div>
+        {[["회사 주소","address","예: 경기도 성남시 분당구"],["가장 가까운 지하철역","station","예: 판교역 신분당선"]].map(([label,field,ph])=>(
+          <div key={field} style={{marginBottom:10}}>
+            <div style={{fontSize:11,color:"#bbb",marginBottom:4}}>{label}</div>
+            <input value={companyInfo[field]||""} onChange={e=>onChange({...companyInfo,[field]:e.target.value})} placeholder={ph}
+              style={{width:"100%",padding:"9px 11px",borderRadius:8,border:"1px solid #E8E8E8",fontSize:13,color:"#333",outline:"none"}}/>
+          </div>
+        ))}
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:"#bbb",marginBottom:6}}>출근 시간대</div>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+            {["8시 이전","8~9시","9~10시","유연근무"].map(t=>(
+              <button key={t} onClick={()=>onChange({...companyInfo,time:t})}
+                style={{padding:"7px 10px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,background:companyInfo.time===t?NAVY:"#F0F0F5",color:companyInfo.time===t?ACCENT:"#888"}}>
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{fontSize:11,color:"#bbb",marginBottom:6}}>주 이용 교통수단</div>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+            {["🚇 대중교통","🚗 자차","🚶 도보","🚲 자전거"].map(t=>(
+              <button key={t} onClick={()=>onChange({...companyInfo,transport:companyInfo.transport===t?"":t})}
+                style={{padding:"7px 10px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,background:companyInfo.transport===t?NAVY:"#F0F0F5",color:companyInfo.transport===t?ACCENT:"#888"}}>
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      {dest&&(
+        <div style={{background:"#fff",borderRadius:12,padding:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#1a1a2e",marginBottom:10}}>🗺 회사 위치 확인</div>
+          <div style={{display:"flex",gap:8}}>
+            <a href={`https://map.kakao.com/link/search/${encodeURIComponent(dest)}`} target="_blank"
+              style={{flex:1,padding:"9px",borderRadius:8,background:"#FEE500",color:"#3A1D00",fontSize:12,fontWeight:700,textAlign:"center",textDecoration:"none",display:"block"}}>카카오맵</a>
+            <a href={`https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(dest)}`} target="_blank"
+              style={{flex:1,padding:"9px",borderRadius:8,background:"#03C75A",color:"#fff",fontSize:12,fontWeight:700,textAlign:"center",textDecoration:"none",display:"block"}}>네이버맵</a>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 메인 앱 ───────────────────────────────────────────────
+const TABS_ROW1=[{key:"집보기",emoji:"🔍",label:"집 보기"},{key:"비교",emoji:"📊",label:"비교"},{key:"시세",emoji:"📈",label:"시세"}];
+const TABS_ROW2=[{key:"매매",emoji:"🏠",label:"매매"},{key:"이사",emoji:"📦",label:"이사"},{key:"설정",emoji:"⚙️",label:"설정"}];
+const ALL_TABS=[...TABS_ROW1,...TABS_ROW2];
+
+function App() {
+  const [mode,setMode]=useState("집보기");
+  const [shared,setShared]=useState(null);
+  const [syncStatus,setSyncStatus]=useState("idle");
+  const [activePropIdx,setActivePropIdx]=useState(0);
+  const [showAddModal,setShowAddModal]=useState(false);
+  const [expandedCL,setExpandedCL]=useState(()=>{const init={};[...CHECKLIST_SECTIONS.매매,...CHECKLIST_SECTIONS.이사].forEach(s=>{init[s.id]=true;});return init;});
+  const sharedRef=useRef(null);
+  const isEditingRef=useRef(false);
+  const saveTimerRef=useRef(null);
+  const pendingSaveRef=useRef(false);
+  useEffect(()=>{sharedRef.current=shared;},[shared]);
+
+  // 초기 로드
+  useEffect(()=>{
+    (async()=>{
+      const data=await fbRead();
+      setShared(data&&data.properties?data:defaultShared());
+    })();
+  },[]);
+
+  // 폴링
+  useEffect(()=>{
+    if(!shared) return;
+    const iv=setInterval(async()=>{
+      if(isEditingRef.current||pendingSaveRef.current) return;
+      const remote=await fbRead();
+      if(!remote) return;
+      const local=sharedRef.current;
+      if((remote.updatedAt||0)>(local.updatedAt||0)){
+        const merged=mergeShared(local,remote);
+        sharedRef.current=merged;
+        setShared(merged);
+      }
+    },POLL_MS);
+    return()=>clearInterval(iv);
+  },[!!shared]);
+
+  // 저장
+  const flushSave=useCallback(async()=>{
+    const toWrite=sharedRef.current;
+    if(!toWrite) return;
+    setSyncStatus("saving");
+    const ok=await fbWrite(toWrite);
+    pendingSaveRef.current=false;
+    setSyncStatus(ok?"saved":"error");
+    setTimeout(()=>setSyncStatus("idle"),2500);
+  },[]);
+
+  const scheduleSave=useCallback(()=>{
+    pendingSaveRef.current=true;
+    if(saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current=setTimeout(()=>flushSave(),800);
+  },[flushSave]);
+
+  const updateShared=(next,metaKeys=[])=>{
+    const now=Date.now();
+    const meta={...(next._meta||{})};
+    metaKeys.forEach(k=>{meta[k]=now;});
+    const updated={...next,_meta:meta,updatedAt:now};
+    sharedRef.current=updated;
+    setShared(updated);
+    scheduleSave();
+  };
+
+  const editProps={onFocus:()=>{isEditingRef.current=true;},onBlur:()=>{isEditingRef.current=false;}};
+
+  if(!shared) return (
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,background:"#F7F8FA"}}>
+      <div style={{fontSize:32}}>🏠</div>
+      <div style={{fontSize:14,color:"#888"}}>데이터 불러오는 중...</div>
+    </div>
+  );
+
+  const {properties,checklist,companyInfo,priceNotes={},decided,clNotes={},clNoteOpen={}}=shared;
+
+  const updateProp=(idx,updated,extra=[])=>{
+    updateShared({...shared,properties:properties.map((x,i)=>i===idx?updated:x)},[`prop:${updated.id}`,...extra]);
+  };
+  const addPropFromComplex=(name,price)=>{
+    const np={...newProperty(properties.length+1),name,price:price||""};
+    updateShared({...shared,properties:[...properties,np]},[`prop:${np.id}`]);
+    setActivePropIdx(properties.length);
+    setShowAddModal(false);
+  };
+  const addPropBlank=()=>{
+    const np=newProperty(properties.length+1);
+    updateShared({...shared,properties:[...properties,np]},[`prop:${np.id}`]);
+    setActivePropIdx(properties.length);
+    setShowAddModal(false);
+  };
+  const removeProp=idx=>{
+    const next=properties.filter((_,i)=>i!==idx);
+    updateShared({...shared,properties:next},[`del:${properties[idx].id}`]);
+    setActivePropIdx(Math.min(activePropIdx,next.length-1));
+  };
+  const moveProp=(idx,dir)=>{
+    const arr=[...properties],to=idx+dir;
+    if(to<0||to>=arr.length) return;
+    [arr[idx],arr[to]]=[arr[to],arr[idx]];
+    updateShared({...shared,properties:arr},["reorder"]);
+    setActivePropIdx(to);
+  };
+  const setDecided=id=>updateShared({...shared,decided:decided===id?null:id},["decided"]);
+  const updateCompany=next=>updateShared({...shared,companyInfo:next},["company"]);
+  const updateChecklist=(next,key)=>updateShared({...shared,checklist:next},key?[`cl:${key}`]:[]);
+  const updatePriceNotes=next=>updateShared({...shared,priceNotes:next},["priceNotes"]);
+
+  const clSections=mode==="매매"||mode==="이사"?CHECKLIST_SECTIONS[mode]:[];
+  const clAllItems=clSections.flatMap(s=>s.items.map((_,i)=>`${s.id}-${i}`));
+  const clDone=clAllItems.filter(k=>checklist[k]).length;
+  const clProgress=clAllItems.length>0?Math.round((clDone/clAllItems.length)*100):0;
+  const curTab=ALL_TABS.find(t=>t.key===mode);
+
+  return (
+    <div style={{minHeight:"100vh",background:"#F7F8FA",maxWidth:480,margin:"0 auto"}}>
+      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100;display:flex;align-items:flex-end}`}</style>
+
+      {/* 헤더 */}
+      <div style={{background:`linear-gradient(135deg,${NAVY} 0%,#2D5A8E 100%)`,padding:"20px 14px 14px",color:"#fff"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
+          <div style={{fontSize:9.5,letterSpacing:2,opacity:0.5,textTransform:"uppercase"}}>내 집 마련 가이드</div>
+          <div style={{fontSize:10,color:syncStatus==="saved"?"#A5D6A7":syncStatus==="saving"?"#FFF9C4":syncStatus==="error"?"#FFAB91":"rgba(255,255,255,0.3)"}}>
+            {syncStatus==="saving"?"⏳ 저장 중":syncStatus==="saved"?"✓ 저장됨":syncStatus==="error"?"⚠️ 저장 실패":"🔥 Firebase"}
+          </div>
+        </div>
+        <div style={{fontSize:17,fontWeight:700,marginBottom:10}}>
+          {curTab?.emoji} {curTab?.label}
+          {mode==="집보기"&&properties[activePropIdx]&&<>{" — "}{properties[activePropIdx].name}{decided===properties[activePropIdx].id&&<span style={{fontSize:12,color:ACCENT,marginLeft:6}}>👑 결정</span>}</>}
+        </div>
+        {[TABS_ROW1,TABS_ROW2].map((row,ri)=>(
+          <div key={ri} style={{display:"flex",gap:4,marginBottom:ri===0?4:0}}>
+            {row.map(t=>(
+              <button key={t.key} onClick={()=>setMode(t.key)}
+                style={{flex:1,padding:"7px 2px",borderRadius:7,border:"none",fontWeight:600,fontSize:11,background:mode===t.key?ACCENT:"rgba(255,255,255,0.15)",color:mode===t.key?NAVY:"rgba(255,255,255,0.8)"}}>
+                {t.emoji} {t.label}
+              </button>
+            ))}
+          </div>
+        ))}
+        {mode==="집보기"&&(
+          <div style={{marginTop:10,display:"flex",gap:5,overflowX:"auto",paddingBottom:2}}>
+            {properties.map((p,i)=>(
+              <button key={p.id} onClick={()=>setActivePropIdx(i)}
+                style={{flexShrink:0,padding:"5px 12px",borderRadius:20,border:decided===p.id?`2px solid ${ACCENT}`:"none",fontSize:11.5,fontWeight:600,background:activePropIdx===i?"#fff":"rgba(255,255,255,0.2)",color:activePropIdx===i?NAVY:"rgba(255,255,255,0.85)"}}>
+                {decided===p.id?"👑 ":""}{p.name}
+              </button>
+            ))}
+            <button onClick={()=>setShowAddModal(true)}
+              style={{flexShrink:0,padding:"5px 12px",borderRadius:20,border:"1.5px dashed rgba(255,255,255,0.4)",background:"transparent",color:"rgba(255,255,255,0.7)",fontSize:12}}>
+              + 추가
+            </button>
+          </div>
+        )}
+        {(mode==="매매"||mode==="이사")&&(
+          <>
+            <div style={{background:"rgba(255,255,255,0.15)",borderRadius:99,overflow:"hidden",height:5,marginTop:10,marginBottom:5}}>
+              <div style={{width:`${clProgress}%`,height:"100%",background:ACCENT,borderRadius:99,transition:"width 0.4s"}}/>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:11,opacity:0.8}}>
+              <span>{clDone} / {clAllItems.length} 완료</span>
+              <span style={{color:ACCENT,fontWeight:700}}>{clProgress}%</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* 컨텐츠 */}
+      <div style={{padding:"14px 14px 80px"}}>
+        {syncStatus==="error"&&(
+          <div style={{background:"#FFF3E0",borderRadius:8,padding:"8px 12px",marginBottom:10,fontSize:12,color:"#E65100"}}>
+            ⚠️ 저장 실패 — 인터넷 연결을 확인해주세요
+          </div>
+        )}
+
+        {mode==="집보기"&&(
+          <>
+            {properties.length>1&&(
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+                <span style={{fontSize:11,color:"#aaa"}}>순서</span>
+                <button onClick={()=>moveProp(activePropIdx,-1)} disabled={activePropIdx===0}
+                  style={{padding:"4px 12px",borderRadius:6,border:"1px solid #E0E0E0",background:"#fff",color:activePropIdx===0?"#ddd":"#555",fontSize:12}}>← 앞으로</button>
+                <button onClick={()=>moveProp(activePropIdx,1)} disabled={activePropIdx===properties.length-1}
+                  style={{padding:"4px 12px",borderRadius:6,border:"1px solid #E0E0E0",background:"#fff",color:activePropIdx===properties.length-1?"#ddd":"#555",fontSize:12}}>뒤로 →</button>
+                <button onClick={()=>setDecided(properties[activePropIdx].id)}
+                  style={{marginLeft:"auto",padding:"4px 12px",borderRadius:6,border:"none",background:decided===properties[activePropIdx].id?NAVY:"#F0F0F5",color:decided===properties[activePropIdx].id?ACCENT:"#777",fontSize:12,fontWeight:600}}>
+                  {decided===properties[activePropIdx].id?"👑 결정됨":"👑 결정"}
+                </button>
+              </div>
+            )}
+            <PropertyDetail prop={properties[activePropIdx]} companyInfo={companyInfo} onChange={(updated)=>updateProp(activePropIdx,updated)}/>
+            {properties.length>1&&(
+              <button onClick={()=>removeProp(activePropIdx)}
+                style={{width:"100%",padding:"10px",borderRadius:9,border:"1.5px solid #FFD0D0",background:"#FFF5F5",color:"#E57373",fontSize:13,fontWeight:600,marginTop:4}}>
+                이 매물 삭제
+              </button>
+            )}
+          </>
+        )}
+
+        {mode==="비교"&&(
+          <>
+            {decided&&(
+              <div style={{background:NAVY,borderRadius:10,padding:"10px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:16}}>👑</span>
+                <div>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,0.6)"}}>최종 결정</div>
+                  <div style={{fontSize:13,fontWeight:700,color:ACCENT}}>{properties.find(p=>p.id===decided)?.name||"—"}</div>
+                </div>
+                <button onClick={()=>setDecided(decided)} style={{marginLeft:"auto",fontSize:11,color:"rgba(255,255,255,0.5)",background:"none",border:"none"}}>취소</button>
+              </div>
+            )}
+            <CompareView properties={properties} decided={decided} onDecide={setDecided}/>
+          </>
+        )}
+
+        {mode==="시세"&&<PriceView priceNotes={priceNotes} onNotesChange={updatePriceNotes}/>}
+        {mode==="설정"&&<SettingsView companyInfo={companyInfo} onChange={updateCompany}/>}
+
+        {(mode==="매매"||mode==="이사")&&(
+          <>
+            {clSections.map(section=>{
+              const isExp=expandedCL[section.id];
+              const secDone=section.items.filter((_,i)=>checklist[`${section.id}-${i}`]).length;
+              return (
+                <div key={section.id} style={{background:"#fff",borderRadius:12,marginBottom:10,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+                  <button onClick={()=>setExpandedCL(p=>({...p,[section.id]:!p[section.id]}))}
+                    style={{width:"100%",background:"none",border:"none",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:26,height:26,borderRadius:6,background:secDone===section.items.length?"#E8F5E9":"#EEF3FB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:secDone===section.items.length?"#388E3C":NAVY}}>
+                        {secDone===section.items.length?"✓":secDone}
+                      </div>
+                      <span style={{fontWeight:700,fontSize:14,color:"#1a1a2e"}}>{section.category}</span>
+                    </div>
+                    <div style={{display:"flex",gap:5,alignItems:"center"}}>
+                      <span style={{fontSize:11,color:"#bbb"}}>{secDone}/{section.items.length}</span>
+                      <span style={{color:"#ccc",fontSize:11}}>{isExp?"▲":"▼"}</span>
+                    </div>
+                  </button>
+                  {isExp&&(
+                    <div style={{borderTop:"1px solid #F0F0F0"}}>
+                      {section.items.map((item,i)=>{
+                        const key=`${section.id}-${i}`;
+                        const done=!!checklist[key];
+                        const note=clNotes[key]||"";
+                        const noteOpen=!!clNoteOpen[key];
+                        return (
+                          <div key={key} style={{borderBottom:"1px solid #F7F8FA",background:done?"#FAFFF8":"#fff"}}>
+                            <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px 11px 16px"}}>
+                              <div onClick={()=>updateChecklist({...checklist,[key]:!checklist[key]},key)}
+                                style={{width:18,height:18,borderRadius:4,flexShrink:0,marginTop:2,border:done?"none":"1.5px solid #C5D0E0",background:done?"#4CAF50":"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+                                {done&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span>}
+                              </div>
+                              <span onClick={()=>updateChecklist({...checklist,[key]:!checklist[key]},key)}
+                                style={{flex:1,fontSize:13.5,lineHeight:1.5,color:done?"#bbb":"#333",textDecoration:done?"line-through":"none",cursor:"pointer"}}>
+                                {item}
+                              </span>
+                              <button onClick={()=>updateShared({...shared,clNoteOpen:{...clNoteOpen,[key]:!noteOpen}})}
+                                style={{flexShrink:0,width:22,height:22,borderRadius:6,border:"none",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",background:noteOpen||note?"#EEF3FB":"#F5F5F5",color:noteOpen||note?NAVY:"#bbb",fontWeight:700,marginTop:1}}>
+                                {note?"📝":"+"}
+                              </button>
+                            </div>
+                            {noteOpen&&(
+                              <div style={{paddingLeft:44,paddingRight:14,paddingBottom:10}}>
+                                <input value={note} onChange={e=>updateShared({...shared,clNotes:{...clNotes,[key]:e.target.value}},["clnote"])}
+                                  placeholder="메모 입력..." autoFocus
+                                  style={{width:"100%",padding:"6px 10px",borderRadius:7,border:"1px solid #D8E4F0",background:"#F5F8FF",fontSize:12.5,color:"#444",outline:"none"}}/>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <button onClick={()=>{const n={...checklist};clAllItems.forEach(k=>delete n[k]);updateChecklist(n);}}
+              style={{width:"100%",padding:"11px",borderRadius:10,border:"1.5px solid #E0E0E0",background:"#fff",color:"#bbb",fontSize:13,marginTop:4}}>
+              {mode} 체크리스트 초기화
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* 매물 추가 모달 */}
+      {showAddModal&&(
+        <div className="modal-bg" onClick={()=>setShowAddModal(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:"16px 16px 0 0",padding:"20px 16px 36px",width:"100%",maxHeight:"70vh",overflowY:"auto"}}>
+            <div style={{fontSize:15,fontWeight:700,color:NAVY,marginBottom:16}}>매물 추가</div>
+            <button onClick={addPropBlank}
+              style={{width:"100%",padding:"12px",borderRadius:10,border:"1.5px dashed #C5D0E0",background:"#F8FAFF",color:"#555",fontSize:13,marginBottom:14,textAlign:"left"}}>
+              ✏️ 빈 매물로 시작하기
+            </button>
+            <div style={{fontSize:12,color:"#aaa",marginBottom:8,fontWeight:600}}>시세 단지에서 선택</div>
+            {PRICE_DATA.map((c,ci)=>(
+              <div key={ci} style={{marginBottom:8}}>
+                <div style={{fontSize:11,color:NAVY,fontWeight:700,marginBottom:4}}>{c.complex}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                  {c.types.map((t,ti)=>(
+                    <button key={ti} onClick={()=>addPropFromComplex(`${c.complex} ${t.type}㎡`,String(t.jun26))}
+                      style={{padding:"5px 10px",borderRadius:7,border:"1px solid #E0E0E0",background:"#fff",fontSize:11,color:"#444"}}>
+                      {t.type}㎡ <span style={{color:"#E53935",fontWeight:700}}>{fmt(t.jun26)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {clProgress===100&&(mode==="매매"||mode==="이사")&&(
+        <div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:NAVY,color:ACCENT,padding:"12px 24px",borderRadius:99,fontWeight:700,fontSize:14,boxShadow:"0 4px 20px rgba(0,0,0,0.2)",whiteSpace:"nowrap"}}>
+          🎉 {mode} 준비 완료!
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
