@@ -583,6 +583,28 @@ function SettingsView({companyInfo, onChange}) {
   );
 }
 
+// ── 확인 모달 ─────────────────────────────────────────────
+function ConfirmModal({message, onConfirm, onCancel}) {
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 24px"}}>
+      <div style={{background:"#fff",borderRadius:16,padding:"24px 20px",width:"100%",maxWidth:320,boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
+        <div style={{fontSize:15,fontWeight:700,color:"#1a1a2e",marginBottom:8,textAlign:"center"}}>확인</div>
+        <div style={{fontSize:13.5,color:"#555",lineHeight:1.6,textAlign:"center",marginBottom:20}}>{message}</div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={onCancel}
+            style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #E0E0E0",background:"#fff",color:"#888",fontSize:13,fontWeight:600}}>
+            취소
+          </button>
+          <button onClick={onConfirm}
+            style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#E53935",color:"#fff",fontSize:13,fontWeight:600}}>
+            확인
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── 메인 앱 ───────────────────────────────────────────────
 const TABS_ROW1=[{key:"집보기",emoji:"🔍",label:"집 보기"},{key:"비교",emoji:"📊",label:"비교"},{key:"시세",emoji:"📈",label:"시세"}];
 const TABS_ROW2=[{key:"매매",emoji:"🏠",label:"매매"},{key:"이사",emoji:"📦",label:"이사"},{key:"설정",emoji:"⚙️",label:"설정"}];
@@ -594,6 +616,9 @@ function App() {
   const [syncStatus,setSyncStatus]=useState("idle");
   const [activePropIdx,setActivePropIdx]=useState(0);
   const [showAddModal,setShowAddModal]=useState(false);
+  const [confirmModal,setConfirmModal]=useState(null); // {message, onConfirm}
+  const confirm=(message,onConfirm)=>setConfirmModal({message,onConfirm});
+  const closeConfirm=()=>setConfirmModal(null);
   const [expandedCL,setExpandedCL]=useState(()=>{const init={};[...CHECKLIST_SECTIONS.매매,...CHECKLIST_SECTIONS.이사].forEach(s=>{init[s.id]=true;});return init;});
   const sharedRef=useRef(null);
   const isEditingRef=useRef(false);
@@ -780,7 +805,7 @@ function App() {
             )}
             <PropertyDetail prop={properties[activePropIdx]} companyInfo={companyInfo} onChange={(updated)=>updateProp(activePropIdx,updated)}/>
             {properties.length>1&&(
-              <button onClick={()=>removeProp(activePropIdx)}
+              <button onClick={()=>confirm(`"${properties[activePropIdx].name}" 매물을 삭제할까요?`,()=>{removeProp(activePropIdx);closeConfirm();})}
                 style={{width:"100%",padding:"10px",borderRadius:9,border:"1.5px solid #FFD0D0",background:"#FFF5F5",color:"#E57373",fontSize:13,fontWeight:600,marginTop:4}}>
                 이 매물 삭제
               </button>
@@ -865,7 +890,7 @@ function App() {
                 </div>
               );
             })}
-            <button onClick={()=>{const n={...checklist};clAllItems.forEach(k=>delete n[k]);updateChecklist(n);}}
+            <button onClick={()=>confirm(`${mode} 체크리스트를 초기화할까요? 모든 체크와 메모가 사라져요.`,()=>{const n={...checklist};clAllItems.forEach(k=>delete n[k]);updateChecklist(n);closeConfirm();})}
               style={{width:"100%",padding:"11px",borderRadius:10,border:"1.5px solid #E0E0E0",background:"#fff",color:"#bbb",fontSize:13,marginTop:4}}>
               {mode} 체크리스트 초기화
             </button>
@@ -899,6 +924,8 @@ function App() {
           </div>
         </div>
       )}
+
+      {confirmModal&&<ConfirmModal message={confirmModal.message} onConfirm={confirmModal.onConfirm} onCancel={closeConfirm}/>}
 
       {clProgress===100&&(mode==="매매"||mode==="이사")&&(
         <div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:NAVY,color:ACCENT,padding:"12px 24px",borderRadius:99,fontWeight:700,fontSize:14,boxShadow:"0 4px 20px rgba(0,0,0,0.2)",whiteSpace:"nowrap"}}>
