@@ -69,6 +69,24 @@ const PRICE_DATA = [
   { complex:"신촌마을 상록데시앙", types:[{type:"전용",sqm:101,jan24:8.0,jun26:8.2}] },
 ];
 
+// 단지별 주소 (설정에서 공통 입력용)
+const COMPLEX_LIST = [
+  { name: "광교더포레스트", address: "경기도 수원시 영통구 이의동", station: "광교중앙역" },
+  { name: "기흥역 더샵", address: "경기도 용인시 기흥구 영덕동", station: "기흥역" },
+  { name: "기흥역 파크 푸르지오", address: "경기도 용인시 기흥구 영덕동", station: "기흥역" },
+  { name: "다은마을 월드메르디앙", address: "경기도 용인시 기흥구 동백동", station: "동백역" },
+  { name: "꽃메마을 현대홈타운 4차 3단지", address: "경기도 용인시 기흥구", station: "" },
+  { name: "블루밍 구성 센트럴", address: "경기도 용인시 기흥구 구성동", station: "" },
+  { name: "행원마을 동아솔레시티", address: "경기도 용인시 기흥구", station: "" },
+  { name: "성동마을 LG빌리지 3차", address: "경기도 용인시 기흥구 마북동", station: "" },
+  { name: "신촌마을 상록데시앙", address: "경기도 용인시 기흥구", station: "" },
+];
+
+const GBS = ["", "👍", "🤔", "👎"]; // 1=굿 2=쏘쏘 3=배드
+const GBS_COLORS = ["", "#4CAF50", "#FF9800", "#F44336"];
+const GBS_BG = ["", "#F0FFF4", "#FFF8E1", "#FFF5F5"];
+const GBS_LABEL = ["", "굿", "쏘쏘", "배드"];
+
 const SCORE_LABELS = ["","😞 별로","🤔 보통","😊 괜찮음","😍 좋음"];
 const COMMUTE_RATINGS = ["","😩 힘듦","😐 보통","🙂 괜찮음","😄 쾌적"];
 const TRANSIT_TYPES = ["🚇 지하철","🚌 버스","🚇🚌 복합","🚶 도보"];
@@ -87,7 +105,30 @@ function fmtPerPyeong(val) {
 function newCommute() { return {transitMin:"",carMin:"",transitType:"",transfers:"",walkMin:"",transitRating:0,carRating:0,note:""}; }
 function newProperty(num) { return {id:Date.now()+num,name:`매물 ${num}`,address:"",price:"",memo:"",checked:{},scores:{},commute:newCommute(),itemNotes:{},itemNoteOpen:{}}; }
 function safeProp(p) { return {...p,checked:p.checked||{},scores:p.scores||{},commute:p.commute||newCommute(),itemNotes:p.itemNotes||{},itemNoteOpen:p.itemNoteOpen||{}}; }
-function defaultShared() { return {properties:[newProperty(1)],checklist:{},companyInfo:{address:"",station:"",time:"",transport:""},priceNotes:{},decided:null,clNotes:{},clNoteOpen:{},updatedAt:0}; }
+function makeInitialProperties() {
+  const now = Date.now();
+  const make = (id, name, address, price, dong, ho, memo) => ({
+    id: now + id,
+    name, address, price, memo: memo||"",
+    checked:{}, scores:{}, commute:newCommute(), itemNotes:{}, itemNoteOpen:{},
+    dong: dong||"", ho: ho||""
+  });
+  return [
+    make(1,  "광교더포레스트 101A", "경기도 수원시 영통구 이의동", "9억", "4011동", "1301호", "출발가능"),
+    make(2,  "광교더포레스트 135B", "경기도 수원시 영통구 이의동", "9억 5천", "4010동", "201호", "출발가능 40평"),
+    make(3,  "광교더포레스트 158A", "경기도 수원시 영통구 이의동", "9억 5천", "4008동", "101호", "출발가능"),
+    make(4,  "기흥역 더샵 102C-①", "경기도 용인시 기흥구 영덕동", "9억 5천", "102동", "3201호", "기흥역더샵 입주일 협의가능 10일"),
+    make(5,  "기흥역 더샵 102C-②", "경기도 용인시 기흥구 영덕동", "9억 5천", "103동", "3601호", "기흥역더샵"),
+    make(6,  "기흥역 더샵 101B", "경기도 용인시 기흥구 영덕동", "9억 3천", "104동", "402호", "기흥역더샵"),
+    make(7,  "파크 푸르지오 101B", "경기도 용인시 기흥구 영덕동", "8억 5천", "305동", "1904호", "입주가능"),
+    make(8,  "파크 푸르지오 101A-①", "경기도 용인시 기흥구 영덕동", "8억 6천", "305동", "601호", "파크 입주가능 6월15일 6시30분"),
+    make(9,  "파크 푸르지오 101A-②", "경기도 용인시 기흥구 영덕동", "8억 8천", "305동", "903호", "입주가능"),
+    make(10, "파크 푸르지오 116D", "경기도 용인시 기흥구 영덕동", "9억 2천", "301동", "2704호", "파크 입주가능"),
+    make(11, "파크 푸르지오 117A", "경기도 용인시 기흥구 영덕동", "9억 2천", "301동", "1201호", "파크 입주가능"),
+  ];
+}
+
+function defaultShared() { return {properties:makeInitialProperties(),checklist:{},companyInfo:{address:"",station:"",time:"",transport:""},complexCommutes:{},priceNotes:{},decided:null,clNotes:{},clNoteOpen:{},updatedAt:0}; }
 
 function mergeShared(local, remote) {
   if(!remote) return local;
@@ -107,127 +148,104 @@ function mergeShared(local, remote) {
 }
 
 // ── 출퇴근 섹션 ───────────────────────────────────────────
-function CommuteSection({prop, companyInfo, onChange}) {
-  const c = prop.commute||{};
-  const upd = (f,v) => onChange({...prop, commute:{...prop.commute,[f]:v}});
+function CommuteSection({prop, companyInfo, complexCommutes={}}) {
+  const matched = COMPLEX_LIST.find(c=>prop.name&&prop.name.includes(c.name));
+  const cc = matched?(complexCommutes[matched.name]||{}):{};
+  const c = {...cc, ...Object.fromEntries(Object.entries(prop.commute||{}).filter(([,v])=>v!==""&&v!==0))};
   const dest = companyInfo.address||companyInfo.station||"";
-  const tc = m => { const n=parseInt(m); return !n?"#ddd":n<=30?"#4CAF50":n<=60?"#FF9800":"#F44336"; };
   const td = m => { const n=parseInt(m); return !n?"—":n<=30?"🟢":n<=60?"🟡":"🔴"; };
+  const tc = m => { const n=parseInt(m); return !n?"#bbb":n<=30?"#4CAF50":n<=60?"#FF9800":"#F44336"; };
+  const hasData = c.transitMin||c.carMin;
+  if(!hasData&&!dest) return null;
   return (
-    <div style={{background:"#fff",borderRadius:12,marginBottom:10,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-      <div style={{padding:"13px 16px 0",display:"flex",alignItems:"center",gap:8}}>
-        <div style={{width:26,height:26,borderRadius:6,background:"#FFF3E0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>🚇</div>
-        <span style={{fontWeight:700,fontSize:13.5,color:"#1a1a2e"}}>출퇴근 정보</span>
-      </div>
-      {!dest&&<div style={{margin:"10px 16px 0",padding:"9px 12px",background:"#FFF8E1",borderRadius:8,fontSize:12,color:"#F57F17"}}>⚠️ 설정 탭에서 회사 위치를 먼저 입력해주세요</div>}
-      <div style={{padding:"12px 16px 14px"}}>
-        <div style={{marginBottom:14}}>
-          <div style={{fontSize:12,color:"#888",fontWeight:600,marginBottom:8}}>🚇 대중교통</div>
-          <div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap"}}>
-            {TRANSIT_TYPES.map(t=>(
-              <button key={t} onClick={()=>upd("transitType",c.transitType===t?"":t)}
-                style={{padding:"5px 10px",borderRadius:6,border:"none",fontSize:11,fontWeight:600,background:c.transitType===t?NAVY:"#F0F0F5",color:c.transitType===t?ACCENT:"#888"}}>
-                {t}
-              </button>
-            ))}
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
-            {[["총 소요시간","transitMin","분","40"],["환승 횟수","transfers","회","1"],["도보 시간","walkMin","분","10"]].map(([label,field,unit,ph])=>(
-              <div key={field}>
-                <div style={{fontSize:10,color:"#bbb",marginBottom:3}}>{label}</div>
-                <div style={{display:"flex",alignItems:"center",gap:3}}>
-                  <input value={c[field]||""} onChange={e=>upd(field,e.target.value.replace(/[^0-9]/g,""))} placeholder={ph}
-                    style={{width:"100%",padding:"7px 8px",borderRadius:7,border:"1px solid #E8E8E8",fontSize:13,textAlign:"center",color:"#333",outline:"none"}}/>
-                  <span style={{fontSize:11,color:"#aaa",whiteSpace:"nowrap"}}>{unit}</span>
-                </div>
+    <div style={{background:"#fff",borderRadius:12,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",padding:"12px 16px"}}>
+      <div style={{fontSize:12,fontWeight:700,color:"#1a1a2e",marginBottom:10}}>🚇 출퇴근 요약</div>
+      {!hasData&&<div style={{fontSize:12,color:"#aaa"}}>설정 탭에서 단지별 출퇴근을 입력해주세요</div>}
+      {hasData&&(
+        <div style={{display:"flex",gap:8,marginBottom:dest?10:0}}>
+          {c.transitMin&&(
+            <div style={{flex:1,background:"#F5F8FF",borderRadius:8,padding:"8px 10px"}}>
+              <div style={{fontSize:10,color:"#888",marginBottom:3}}>🚇 대중교통</div>
+              <div style={{fontSize:15,fontWeight:700,color:tc(c.transitMin)}}>{td(c.transitMin)} {c.transitMin}분</div>
+              <div style={{fontSize:10,color:"#aaa",marginTop:2}}>
+                {[c.transitType,c.transfers?`환승 ${c.transfers}회`:"",c.walkMin?`도보 ${c.walkMin}분`:""].filter(Boolean).join(" · ")||""}
               </div>
-            ))}
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-            <span style={{fontSize:16}}>{td(c.transitMin)}</span>
-            <span style={{fontSize:12,color:tc(c.transitMin),fontWeight:700}}>
-              {c.transitMin?`${c.transitMin}분`:"시간 미입력"}
-              {c.transfers?` · 환승 ${c.transfers}회`:""}
-              {c.walkMin?` · 도보 ${c.walkMin}분`:""}
-            </span>
-          </div>
-          <div style={{display:"flex",gap:5}}>
-            {[1,2,3,4].map(v=>(
-              <button key={v} onClick={()=>upd("transitRating",c.transitRating===v?0:v)}
-                style={{flex:1,padding:"5px 2px",borderRadius:6,border:"none",fontSize:10.5,fontWeight:600,background:c.transitRating===v?NAVY:"#F0F0F5",color:c.transitRating===v?ACCENT:"#888"}}>
-                {COMMUTE_RATINGS[v]}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div style={{marginBottom:14}}>
-          <div style={{fontSize:12,color:"#888",fontWeight:600,marginBottom:8}}>🚗 자차</div>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <div style={{fontSize:10,color:"#bbb",marginBottom:3}}>소요시간</div>
-            <div style={{display:"flex",alignItems:"center",gap:4}}>
-              <input value={c.carMin||""} onChange={e=>upd("carMin",e.target.value.replace(/[^0-9]/g,""))}
-                placeholder="30" style={{width:64,padding:"7px 8px",borderRadius:7,border:"1px solid #E8E8E8",fontSize:13,textAlign:"center",color:"#333",outline:"none"}}/>
-              <span style={{fontSize:11,color:"#aaa"}}>분</span>
-              <span style={{fontSize:16}}>{td(c.carMin)}</span>
             </div>
-          </div>
-          <div style={{display:"flex",gap:5}}>
-            {[1,2,3,4].map(v=>(
-              <button key={v} onClick={()=>upd("carRating",c.carRating===v?0:v)}
-                style={{flex:1,padding:"5px 2px",borderRadius:6,border:"none",fontSize:10.5,fontWeight:600,background:c.carRating===v?NAVY:"#F0F0F5",color:c.carRating===v?ACCENT:"#888"}}>
-                {COMMUTE_RATINGS[v]}
-              </button>
-            ))}
-          </div>
+          )}
+          {c.carMin&&(
+            <div style={{flex:1,background:"#F5F8FF",borderRadius:8,padding:"8px 10px"}}>
+              <div style={{fontSize:10,color:"#888",marginBottom:3}}>🚗 자차</div>
+              <div style={{fontSize:15,fontWeight:700,color:tc(c.carMin)}}>{td(c.carMin)} {c.carMin}분</div>
+            </div>
+          )}
         </div>
-        <input value={c.note||""} onChange={e=>upd("note",e.target.value)} placeholder="출퇴근 메모 (환승 복잡함, 주차 어려움 등)"
-          style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid #E8E8E8",fontSize:12.5,color:"#555",outline:"none"}}/>
-        {dest&&(
-          <div style={{display:"flex",gap:8,marginTop:10}}>
-            <a href={`https://map.kakao.com/link/to/${encodeURIComponent(dest)}`} target="_blank"
-              style={{flex:1,padding:"9px",borderRadius:8,background:"#FEE500",color:"#3A1D00",fontSize:12,fontWeight:700,textAlign:"center",textDecoration:"none",display:"block"}}>
-              🗺 카카오맵
-            </a>
-            <a href={`https://m.map.naver.com/directions/?to=${encodeURIComponent(dest)}`} target="_blank"
-              style={{flex:1,padding:"9px",borderRadius:8,background:"#03C75A",color:"#fff",fontSize:12,fontWeight:700,textAlign:"center",textDecoration:"none",display:"block"}}>
-              🗺 네이버맵
-            </a>
-          </div>
-        )}
-      </div>
+      )}
+      {dest&&(
+        <div style={{display:"flex",gap:8}}>
+          <a href={`https://map.kakao.com/link/to/${encodeURIComponent(dest)}`} target="_blank"
+            style={{flex:1,padding:"8px",borderRadius:8,background:"#FEE500",color:"#3A1D00",fontSize:12,fontWeight:700,textAlign:"center",textDecoration:"none",display:"block"}}>
+            🗺 카카오맵
+          </a>
+          <a href={`https://m.map.naver.com/directions/?to=${encodeURIComponent(dest)}`} target="_blank"
+            style={{flex:1,padding:"8px",borderRadius:8,background:"#03C75A",color:"#fff",fontSize:12,fontWeight:700,textAlign:"center",textDecoration:"none",display:"block"}}>
+            🗺 네이버맵
+          </a>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── 매물 상세 ─────────────────────────────────────────────
-function PropertyDetail({prop: rawProp, companyInfo, onChange}) {
+function PropertyDetail({prop: rawProp, companyInfo, complexCommutes={}, onChange}) {
   const prop = safeProp(rawProp);
+  // 단지명 매칭해서 공통 출퇴근 자동 적용
+  const matchedComplex = COMPLEX_LIST.find(c=>prop.name&&prop.name.includes(c.name));
+  const complexCC = matchedComplex ? (complexCommutes[matchedComplex.name]||{}) : {};
+  const effectiveCommute = {
+    ...complexCC,
+    ...Object.fromEntries(Object.entries(prop.commute||{}).filter(([,v])=>v!=""&&v!==0)),
+  };
+  const displayProp = {...prop, commute: {...(prop.commute||{}), ...effectiveCommute}};
   const [expanded, setExpanded] = useState(()=>Object.fromEntries(VIEWING_SECTIONS.map(s=>[s.id,true])));
   const checked = prop.checked||{};
   const scores = prop.scores||{};
   const itemNotes = prop.itemNotes||{};
   const itemNoteOpen = prop.itemNoteOpen||{};
-  const toggleCheck = key => onChange({...prop, checked:{...checked,[key]:!checked[key]}});
+  const toggleCheck = key => onChange({...prop, checked:{...checked,[key]:((checked[key]||0)+1)%4}});
   const setScore = (sid,val) => onChange({...prop, scores:{...scores,[sid]:val}});
   const allKeys = VIEWING_SECTIONS.flatMap(s=>s.items.map((_,i)=>`${s.id}-${i}`));
-  const doneCount = allKeys.filter(k=>checked[k]).length;
+  const doneCount = allKeys.filter(k=>checked[k]&&checked[k]>0).length;
   const progress = Math.round((doneCount/allKeys.length)*100);
   return (
     <div>
-      <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-        <div style={{marginBottom:14}}>
-          <div style={{fontSize:11,color:"#bbb",marginBottom:4}}>매물 이름</div>
-          <input value={prop.name||""} onChange={e=>onChange({...prop,name:e.target.value})} placeholder="예: 기흥역 더샵 101B"
-            style={{width:"100%",padding:"9px 12px",borderRadius:9,border:"1.5px solid #D0DCF0",fontSize:15,fontWeight:700,color:NAVY,outline:"none",background:"#F5F8FF"}}/>
-        </div>
-        <div style={{height:1,background:"#F0F0F0",marginBottom:12}}/>
-        {[["주소","address","예: 경기도 용인시 기흥구"],["가격","price","예: 8억 8천"],["메모","memo","특이사항, 느낀 점"]].map(([label,field,ph])=>(
-          <div key={field} style={{marginBottom:8}}>
-            <div style={{fontSize:11,color:"#bbb",marginBottom:3}}>{label}</div>
-            <input value={prop[field]||""} onChange={e=>onChange({...prop,[field]:e.target.value})} placeholder={ph}
-              style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid #E8E8E8",fontSize:13,color:"#333",outline:"none"}}/>
+      <div style={{background:"#fff",borderRadius:12,padding:"12px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+        {/* 매물 이름 */}
+        <input value={prop.name||""} onChange={e=>onChange({...prop,name:e.target.value})} placeholder="매물 이름"
+          style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #D0DCF0",fontSize:15,fontWeight:700,color:NAVY,outline:"none",background:"#F5F8FF",marginBottom:8}}/>
+
+        {/* 가격 + 주소 툴팁 한 줄 */}
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <input value={prop.price||""} onChange={e=>onChange({...prop,price:e.target.value})} placeholder="가격 (예: 8억 8천)"
+            style={{flex:1,padding:"7px 10px",borderRadius:8,border:"1px solid #E8E8E8",fontSize:13,color:"#333",outline:"none"}}/>
+          <div style={{position:"relative"}}>
+            <button
+              onClick={e=>{e.currentTarget.nextSibling.style.display=e.currentTarget.nextSibling.style.display==="block"?"none":"block";}}
+              style={{padding:"7px 10px",borderRadius:8,border:"1px solid #E8E8E8",background:prop.address?"#EEF3FB":"#F5F5F5",color:prop.address?NAVY:"#bbb",fontSize:12,fontWeight:600,whiteSpace:"nowrap"}}>
+              📍 주소
+            </button>
+            <div style={{display:"none",position:"absolute",right:0,top:"110%",background:"#fff",borderRadius:10,boxShadow:"0 4px 20px rgba(0,0,0,0.15)",padding:12,zIndex:50,width:240}}>
+              <div style={{fontSize:11,color:"#aaa",marginBottom:4}}>주소</div>
+              <input value={prop.address||""} onChange={e=>onChange({...prop,address:e.target.value})} placeholder="예: 경기도 용인시 기흥구"
+                style={{width:"100%",padding:"7px 10px",borderRadius:7,border:"1px solid #E8E8E8",fontSize:12.5,color:"#333",outline:"none"}}/>
+            </div>
           </div>
-        ))}
+        </div>
+
+        {/* 메모 */}
+        <textarea value={prop.memo||""} onChange={e=>onChange({...prop,memo:e.target.value})} placeholder="✏️ 메모 — 느낀 점, 특이사항, 부동산 코멘트 등 자유롭게"
+          rows={2}
+          style={{width:"100%",padding:"7px 10px",borderRadius:8,border:"1px solid #E8E8E8",fontSize:12.5,color:"#444",outline:"none",resize:"none",lineHeight:1.5}}/>
       </div>
       <div style={{background:NAVY,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:12}}>
         <div style={{flex:1}}>
@@ -237,10 +255,10 @@ function PropertyDetail({prop: rawProp, companyInfo, onChange}) {
         </div>
         <span style={{color:ACCENT,fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>{doneCount}/{allKeys.length} 확인</span>
       </div>
-      <CommuteSection prop={prop} companyInfo={companyInfo} onChange={onChange}/>
+      <CommuteSection prop={prop} companyInfo={companyInfo} complexCommutes={complexCommutes}/>
       {VIEWING_SECTIONS.map(section=>{
         const isExp = expanded[section.id];
-        const secDone = section.items.filter((_,i)=>checked[`${section.id}-${i}`]).length;
+        const secDone = section.items.filter((_,i)=>(checked[`${section.id}-${i}`]||0)>0).length;
         const score = scores[section.id]||0;
         return (
           <div key={section.id} style={{background:"#fff",borderRadius:12,marginBottom:10,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
@@ -262,14 +280,16 @@ function PropertyDetail({prop: rawProp, companyInfo, onChange}) {
                   const note=itemNotes[key]||"";
                   const noteOpen=!!(itemNoteOpen[key]);
                   return (
-                    <div key={key} style={{borderBottom:"1px solid #F7F8FA",background:done?"#FAFFF8":"#fff"}}>
-                      <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px 10px 16px"}}>
+                    <div key={key} style={{borderBottom:"1px solid #F7F8FA",background:checked[key]===3?"#FFF5F5":checked[key]===1?"#F0FFF4":"#fff"}}>
+                      <div style={{display:"flex",alignItems:"flex-start",gap:8,padding:"10px 14px 10px 16px"}}>
                         <div onClick={()=>toggleCheck(key)}
-                          style={{width:18,height:18,borderRadius:4,flexShrink:0,marginTop:2,border:done?"none":"1.5px solid #C5D0E0",background:done?"#4CAF50":"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-                          {done&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span>}
+                          style={{flexShrink:0,marginTop:1,padding:"3px 7px",borderRadius:6,border:checked[key]?"none":"1.5px solid #E0E0E0",background:checked[key]?GBS_BG[checked[key]]:"#F5F5F5",display:"flex",alignItems:"center",gap:3,cursor:"pointer",minWidth:48,justifyContent:"center"}}>
+                          {checked[key]
+                            ?<><span style={{fontSize:13}}>{GBS[checked[key]]}</span><span style={{fontSize:10,color:GBS_COLORS[checked[key]],fontWeight:700}}>{GBS_LABEL[checked[key]]}</span></>
+                            :<span style={{fontSize:10,color:"#bbb"}}>평가</span>}
                         </div>
                         <span onClick={()=>toggleCheck(key)}
-                          style={{flex:1,fontSize:13,lineHeight:1.5,color:done?"#bbb":"#333",textDecoration:done?"line-through":"none",cursor:"pointer"}}>
+                          style={{flex:1,fontSize:13,lineHeight:1.5,color:checked[key]===3?"#bbb":"#333",textDecoration:checked[key]===3?"line-through":"none",cursor:"pointer"}}>
                           {item}
                         </span>
                         <button onClick={e=>{e.stopPropagation();onChange({...prop,itemNoteOpen:{...itemNoteOpen,[key]:!noteOpen}});}}
@@ -308,8 +328,17 @@ function PropertyDetail({prop: rawProp, companyInfo, onChange}) {
 }
 
 // ── 비교 뷰 ───────────────────────────────────────────────
-function CompareView({properties: rawProperties, decided, onDecide}) {
-  const properties = rawProperties.map(safeProp);
+function CompareView({properties: rawProperties, decided, onDecide, complexCommutes={}}) {
+  const properties = rawProperties.map(p => {
+    const safe = safeProp(p);
+    const matched = COMPLEX_LIST.find(c => safe.name && safe.name.includes(c.name));
+    const cc = matched ? (complexCommutes[matched.name]||{}) : {};
+    const mergedCommute = {
+      ...cc,
+      ...Object.fromEntries(Object.entries(safe.commute||{}).filter(([,v])=>v!==""&&v!==0)),
+    };
+    return {...safe, commute: mergedCommute};
+  });
   if(properties.length<2) return (
     <div style={{textAlign:"center",padding:"60px 20px",color:"#aaa"}}>
       <div style={{fontSize:40,marginBottom:12}}>🏠🏠</div>
@@ -318,16 +347,28 @@ function CompareView({properties: rawProperties, decided, onDecide}) {
   );
   const cols=`100px repeat(${properties.length}, 1fr)`;
   const commuteScore=p=>(p.commute?.transitRating||0)+(p.commute?.carRating||0);
+  const minColW = 90;
+  const totalW = 100 + properties.length * minColW;
+  const needsScroll = totalW > 360;
+
   return (
     <div>
+      <div style={{overflowX: needsScroll ? "auto" : "visible", WebkitOverflowScrolling:"touch", marginBottom: 8}}>
+       <div style={{minWidth: needsScroll ? totalW : "auto"}}>
       <div style={{display:"grid",gridTemplateColumns:cols,gap:5,marginBottom:8}}>
         <div/>
-        {properties.map(p=>(
-          <div key={p.id} style={{background:decided===p.id?ACCENT:NAVY,borderRadius:10,padding:"10px 6px",textAlign:"center"}}>
-            <div style={{color:decided===p.id?NAVY:ACCENT,fontWeight:700,fontSize:12}}>{decided===p.id?"👑 ":""}{p.name}</div>
-            {p.price&&<div style={{color:decided===p.id?"rgba(0,0,0,0.5)":"rgba(255,255,255,0.65)",fontSize:10,marginTop:2}}>{p.price}</div>}
-          </div>
-        ))}
+        {properties.map(p=>{
+          const priceMatch = PRICE_DATA.flatMap(c=>c.types.map(t=>({...t,complex:c.complex}))).find(t=>p.name&&p.name.includes(t.complex)&&p.name.includes(t.type));
+          const diff = priceMatch ? priceMatch.jun26 - priceMatch.jan24 : null;
+          const pct = priceMatch ? Math.round((diff/priceMatch.jan24)*100) : null;
+          return (
+            <div key={p.id} style={{background:decided===p.id?ACCENT:NAVY,borderRadius:10,padding:"10px 6px",textAlign:"center"}}>
+              <div style={{color:decided===p.id?NAVY:ACCENT,fontWeight:700,fontSize:11}}>{decided===p.id?"👑 ":""}{p.name}</div>
+              {p.price&&<div style={{color:decided===p.id?"rgba(0,0,0,0.5)":"rgba(255,255,255,0.65)",fontSize:10,marginTop:2}}>{p.price}</div>}
+              {diff&&<div style={{color:"#FF8A65",fontSize:10,marginTop:2,fontWeight:600}}>+{fmt(diff)} ({pct}%↑)</div>}
+            </div>
+          );
+        })}
       </div>
       <div style={{background:"#FFF8E1",borderRadius:10,padding:"10px 12px",marginBottom:10}}>
         <div style={{fontSize:12,fontWeight:700,color:"#E65100",marginBottom:8}}>🚇 출퇴근 비교</div>
@@ -376,10 +417,10 @@ function CompareView({properties: rawProperties, decided, onDecide}) {
                     return (
                       <div key={p.id} style={{background:done?"#F0FFF4":"#FAFAFA",borderRadius:6,padding:"5px 7px",minHeight:28}}>
                         <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:note?3:0}}>
-                          <div style={{width:14,height:14,borderRadius:3,background:done?"#4CAF50":"#E0E0E0",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                            {done&&<span style={{color:"#fff",fontSize:9,fontWeight:700}}>✓</span>}
-                          </div>
-                          <span style={{fontSize:10,color:done?"#388E3C":"#bbb",fontWeight:600}}>{done?"확인":"미확인"}</span>
+                          {p.checked[key]>0
+                            ?<span style={{fontSize:12}}>{GBS[p.checked[key]]}<span style={{fontSize:9,color:GBS_COLORS[p.checked[key]],fontWeight:600,marginLeft:2}}>{GBS_LABEL[p.checked[key]]}</span></span>
+                            :<span style={{fontSize:10,color:"#ddd"}}>—</span>
+                          }
                         </div>
                         {note&&<div style={{fontSize:10.5,color:"#555",lineHeight:1.4}}>{note}</div>}
                       </div>
@@ -412,11 +453,11 @@ function CompareView({properties: rawProperties, decided, onDecide}) {
           );
         })}
       </div>
+      </div>{/* minWidth wrapper */}
+      </div>{/* scroll wrapper */}
     </div>
   );
 }
-
-// ── 시세 뷰 ───────────────────────────────────────────────
 function PriceView({priceNotes, onNotesChange}) {
   const [sortBy,setSortBy]=useState("diff");
   const [maxBudget,setMaxBudget]=useState("");
@@ -539,7 +580,89 @@ function PriceView({priceNotes, onNotesChange}) {
 }
 
 // ── 설정 뷰 ───────────────────────────────────────────────
-function SettingsView({companyInfo, onChange}) {
+function ComplexSettings({complexCommutes={}, onChange}) {
+  const [expanded, setExpanded] = useState(null);
+  return (
+    <div style={{background:"#fff",borderRadius:12,marginBottom:12,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+      <div style={{padding:"13px 16px",fontWeight:700,fontSize:13,color:"#1a1a2e",borderBottom:"1px solid #F0F0F0"}}>
+        🏢 단지별 출퇴근 공통 설정
+      </div>
+      <div style={{padding:"8px 0"}}>
+        <div style={{fontSize:11,color:"#aaa",padding:"6px 16px"}}>설정해두면 같은 단지 매물에 자동 적용돼요</div>
+        {COMPLEX_LIST.map((c,i)=>{
+          const cc = complexCommutes[c.name]||{};
+          const isExp = expanded===i;
+          const hasData = cc.transitMin||cc.carMin;
+          return (
+            <div key={i} style={{borderTop:"1px solid #F7F8FA"}}>
+              <button onClick={()=>setExpanded(isExp?null:i)}
+                style={{width:"100%",background:"none",border:"none",padding:"11px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:13,fontWeight:600,color:"#333"}}>{c.name}</span>
+                  {hasData&&<span style={{fontSize:10,color:"#4CAF50",fontWeight:600}}>✓ 설정됨</span>}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  {hasData&&(
+                    <span onClick={e=>{e.stopPropagation();const n={...complexCommutes};delete n[c.name];onChange(n);}}
+                      style={{fontSize:11,color:"#E57373",fontWeight:600,padding:"2px 8px",borderRadius:5,background:"#FFF5F5"}}>
+                      초기화
+                    </span>
+                  )}
+                  <span style={{color:"#ccc",fontSize:11}}>{isExp?"▲":"▼"}</span>
+                </div>
+              </button>
+              {isExp&&(
+                <div style={{padding:"0 16px 14px",background:"#FAFBFF"}}>
+                  <div style={{fontSize:11,color:"#aaa",marginBottom:10}}>주소: {c.address} {c.station&&`/ ${c.station}`}</div>
+
+                  {/* 대중교통 */}
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:11,color:"#555",fontWeight:600,marginBottom:6}}>🚇 대중교통</div>
+                    <div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap"}}>
+                      {TRANSIT_TYPES.map(t=>(
+                        <button key={t} onClick={()=>onChange({...complexCommutes,[c.name]:{...cc,transitType:cc.transitType===t?"":t}})}
+                          style={{padding:"4px 9px",borderRadius:6,border:"none",fontSize:11,fontWeight:600,background:cc.transitType===t?NAVY:"#F0F0F5",color:cc.transitType===t?ACCENT:"#888"}}>
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                      {[["총 시간","transitMin","분"],["환승","transfers","회"],["도보","walkMin","분"]].map(([label,field,unit])=>(
+                        <div key={field}>
+                          <div style={{fontSize:10,color:"#bbb",marginBottom:3}}>{label}</div>
+                          <div style={{display:"flex",alignItems:"center",gap:2}}>
+                            <input value={cc[field]||""} onChange={e=>onChange({...complexCommutes,[c.name]:{...cc,[field]:e.target.value.replace(/[^0-9]/g,"")}})}
+                              placeholder="—"
+                              style={{width:"100%",padding:"6px",borderRadius:7,border:"1px solid #E8E8E8",fontSize:13,textAlign:"center",color:"#333",outline:"none"}}/>
+                            <span style={{fontSize:10,color:"#aaa"}}>{unit}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 자차 */}
+                  <div>
+                    <div style={{fontSize:11,color:"#555",fontWeight:600,marginBottom:6}}>🚗 자차</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <input value={cc.carMin||""} onChange={e=>onChange({...complexCommutes,[c.name]:{...cc,carMin:e.target.value.replace(/[^0-9]/g,"")}})}
+                        placeholder="—"
+                        style={{width:64,padding:"6px 8px",borderRadius:7,border:"1px solid #E8E8E8",fontSize:13,textAlign:"center",color:"#333",outline:"none"}}/>
+                      <span style={{fontSize:11,color:"#aaa"}}>분</span>
+                      {cc.carMin&&<span style={{fontSize:14}}>{parseInt(cc.carMin)<=30?"🟢":parseInt(cc.carMin)<=60?"🟡":"🔴"}</span>}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SettingsView({companyInfo, onChange, complexCommutes={}, onComplexChange}) {
   const dest=companyInfo.address||companyInfo.station||"";
   return (
     <div>
@@ -575,6 +698,9 @@ function SettingsView({companyInfo, onChange}) {
           </div>
         </div>
       </div>
+      {/* 단지별 공통 출퇴근 설정 */}
+      <ComplexSettings complexCommutes={complexCommutes} onChange={onComplexChange}/>
+
       {dest&&(
         <div style={{background:"#fff",borderRadius:12,padding:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
           <div style={{fontSize:12,fontWeight:700,color:"#1a1a2e",marginBottom:10}}>🗺 회사 위치 확인</div>
@@ -694,7 +820,7 @@ function App() {
     </div>
   );
 
-  const {properties:rawProperties,checklist:rawChecklist,companyInfo,priceNotes={},decided,clNotes={},clNoteOpen={}}=shared;
+  const {properties:rawProperties,checklist:rawChecklist,companyInfo,complexCommutes={},priceNotes={},decided,clNotes={},clNoteOpen={}}=shared;
   const properties=(rawProperties||[newProperty(1)]).map(safeProp);
   const checklist=rawChecklist||{};
 
@@ -727,6 +853,7 @@ function App() {
   };
   const setDecided=id=>updateShared({...shared,decided:decided===id?null:id},["decided"]);
   const updateCompany=next=>updateShared({...shared,companyInfo:next},["company"]);
+  const updateComplexCommutes=next=>updateShared({...shared,complexCommutes:next},["complexCommutes"]);
   const updateChecklist=(next,key)=>updateShared({...shared,checklist:next},key?[`cl:${key}`]:[]);
   const updatePriceNotes=next=>updateShared({...shared,priceNotes:next},["priceNotes"]);
 
@@ -812,7 +939,7 @@ function App() {
                 </button>
               </div>
             )}
-            <PropertyDetail prop={properties[activePropIdx]} companyInfo={companyInfo} onChange={(updated)=>updateProp(activePropIdx,updated)}/>
+            <PropertyDetail prop={properties[activePropIdx]} companyInfo={companyInfo} complexCommutes={complexCommutes} onChange={(updated)=>updateProp(activePropIdx,updated)}/>
             {properties.length>1&&(
               <button onClick={()=>confirm(`"${properties[activePropIdx].name}" 매물을 삭제할까요?`,()=>{removeProp(activePropIdx);closeConfirm();})}
                 style={{width:"100%",padding:"10px",borderRadius:9,border:"1.5px solid #FFD0D0",background:"#FFF5F5",color:"#E57373",fontSize:13,fontWeight:600,marginTop:4}}>
@@ -834,12 +961,12 @@ function App() {
                 <button onClick={()=>setDecided(decided)} style={{marginLeft:"auto",fontSize:11,color:"rgba(255,255,255,0.5)",background:"none",border:"none"}}>취소</button>
               </div>
             )}
-            <CompareView properties={properties} decided={decided} onDecide={setDecided}/>
+            <CompareView properties={properties} decided={decided} onDecide={setDecided} complexCommutes={complexCommutes}/>
           </>
         )}
 
         {mode==="시세"&&<PriceView priceNotes={priceNotes} onNotesChange={updatePriceNotes}/>}
-        {mode==="설정"&&<SettingsView companyInfo={companyInfo} onChange={updateCompany}/>}
+        {mode==="설정"&&<SettingsView companyInfo={companyInfo} onChange={updateCompany} complexCommutes={complexCommutes} onComplexChange={updateComplexCommutes}/>}
 
         {(mode==="매매"||mode==="이사")&&(
           <>
